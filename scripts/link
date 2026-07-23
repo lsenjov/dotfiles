@@ -1,0 +1,313 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=lib.sh
+source "$script_dir/lib.sh"
+
+dry_run=false
+target_root=$HOME
+packages=()
+
+usage() {
+  printf 'Usage: %s [--dry-run] [--target DIR] [PACKAGE ...]\n' "${0##*/}"
+}
+
+while (($# > 0)); do
+  case "$1" in
+    --dry-run)
+      dry_run=true
+      shift
+      ;;
+    --target)
+      (($# >= 2)) || die "--target requires a directory"
+      target_root=$2
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    --*)
+      die "unknown option: $1"
+      ;;
+    *)
+      packages+=("$1")
+      shift
+      ;;
+  esac
+done
+
+target_root=$(canonical_target_root "$target_root")
+
+if ((${#packages[@]} == 0)); then
+  mapfile -t packages < <(load_default_packages)
+fi
+
+require_stow
+validate_packages "${packages[@]}"
+
+declare -a entries=()
+declare -a conflicts=()
+declare -a managed=()
+declare -a absent=()
+declare -A entry_packages=()
+declare -A entry_sources=()
+
+collect_entry() {
+  local package=$1
+  local source_relative=$2
+  local target_relative=$3
+  local target_path=$target_root/$target_relative
+
+  [[ -z "${entry_packages[$target_relative]:-}" ]] ||
+    die "duplicate managed target: $target_relative"
+  entry_packages[$target_relative]=$package
+  entry_sources[$target_relative]=$source_relative
+  entries+=("$package"$'\t'"$source_relative"$'\t'"$target_relative")
+  if link_points_to "$target_path" "$packages_root/$package/$source_relative"; then
+    managed+=("$target_relative")
+  elif [[ -e "$target_path" || -L "$target_path" ]]; then
+    conflicts+=("$target_relative")
+  else
+    absent+=("$target_relative")
+  fi
+}
+
+for_each_managed_path collect_entry "${packages[@]}"
+((${#entries[@]} > 0)) || die "no managed paths selected"
+verify_package_coverage "${packages[@]}"
+validate_target_ancestors "$target_root" "${packages[@]}"
+
+shadow_root=$(mktemp -d)
+cleanup_shadow() {
+  rm -rf -- "$shadow_root"
+}
+trap cleanup_shadow EXIT
+
+ensure_target_containers "$shadow_root" "${packages[@]}"
+for target_relative in "${conflicts[@]}"; do
+  mkdir -p -- "$shadow_root/$(dirname -- "$target_relative")"
+  cp -a -- "$target_root/$target_relative" "$shadow_root/$target_relative"
+done
+
+info "Stow simulation against a shadow home"
+set +e
+simulation_output=$(run_stow "$shadow_root" --simulate "${packages[@]}" 2>&1)
+simulation_status=$?
+set -e
+if [[ -n "$simulation_output" ]]; then
+  printf '%s\n' "$simulation_output"
+fi
+if ((simulation_status != 0 && ${#conflicts[@]} == 0)); then
+  die "Stow simulation failed without a declared target conflict"
+fi
+
+if ((${#conflicts[@]} > 0)); then
+  info "Conflicts requiring backup"
+  printf '  %s\n' "${conflicts[@]}"
+else
+  info "No unmanaged conflicts"
+fi
+
+if $dry_run; then
+  info "Dry run complete; no target files were changed"
+  exit 0
+fi
+
+if ((${#managed[@]} == ${#entries[@]})); then
+  info "All selected packages are already linked"
+  exit 0
+fi
+
+timestamp=$(date -u +%Y%m%dT%H%M%SZ)
+backup_root=$state_root/backups/$timestamp
+suffix=0
+while [[ -e "$backup_root" ]]; do
+  ((suffix += 1))
+  backup_root=$state_root/backups/${timestamp}_$suffix
+done
+
+mkdir -p -- "$backup_root/copies" "$backup_root/originals"
+manifest=$backup_root/manifest.tsv
+printf 'target\tstate\ttype\tmode\tsymlink_target\tbackup\tpackage\tsource\n' \
+  >"$manifest"
+
+for target_relative in "${managed[@]}"; do
+  target_path=$target_root/$target_relative
+  printf '%s\tmanaged\tsymlink\t%s\t%s\t-\t%s\t%s\n' \
+    "$target_relative" \
+    "$(stat -c '%a' -- "$target_path")" \
+    "$(readlink -- "$target_path")" \
+    "${entry_packages[$target_relative]}" \
+    "${entry_sources[$target_relative]}" >>"$manifest"
+done
+for target_relative in "${absent[@]}"; do
+  printf '%s\tabsent\tabsent\t-\t-\t-\t%s\t%s\n' \
+    "$target_relative" \
+    "${entry_packages[$target_relative]}" \
+    "${entry_sources[$target_relative]}" >>"$manifest"
+done
+for target_relative in "${conflicts[@]}"; do
+  target_path=$target_root/$target_relative
+  kind=$(path_kind "$target_path")
+  mode=$(stat -c '%a' -- "$target_path")
+  link_target=-
+  if [[ "$kind" == symlink ]]; then
+    link_target=$(readlink -- "$target_path")
+  fi
+  backup_relative=copies/$target_relative
+  printf '%s\tmoved\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$target_relative" "$kind" "$mode" "$link_target" "$backup_relative" \
+    "${entry_packages[$target_relative]}" \
+    "${entry_sources[$target_relative]}" \
+    >>"$manifest"
+
+  mkdir -p -- \
+    "$backup_root/copies/$(dirname -- "$target_relative")" \
+    "$backup_root/originals/$(dirname -- "$target_relative")"
+  cp -a -- "$target_path" "$backup_root/copies/$target_relative"
+
+  path_matches_copy \
+    "$target_path" "$backup_root/copies/$target_relative" "$kind" "$mode" ||
+    die "backup verification failed for $target_relative"
+done
+
+printf 'prepared\n' >"$backup_root/status"
+
+created_containers=()
+record_container() {
+  local container=$1
+
+  if [[ ! -d "$target_root/$container" ]]; then
+    created_containers+=("$container")
+  fi
+}
+if package_is_selected codex "${packages[@]}"; then
+  record_container .codex
+fi
+if package_is_selected agents "${packages[@]}"; then
+  record_container .agents
+  record_container .agents/skills
+fi
+printf '%s\n' "${created_containers[@]}" >"$backup_root/created-containers"
+
+validate_target_ancestors "$target_root" "${packages[@]}"
+transaction_active=true
+rollback() {
+  local reason=${1:-failure}
+  local target_relative state kind mode link_target _backup package source_relative
+  local source_path
+  local manifest_header
+  local rollback_failed=false
+
+  $transaction_active || return 0
+  transaction_active=false
+  trap - ERR INT TERM
+  set +e
+  warn "rolling back after $reason"
+
+  if ! exec 3<"$manifest" ||
+    ! IFS= read -r manifest_header <&3 ||
+    [[ "$manifest_header" != $'target\tstate\ttype\tmode\tsymlink_target\tbackup\tpackage\tsource' ]]; then
+    exec 3<&-
+    printf 'rollback-incomplete\n' >"$backup_root/status"
+    warn "rollback manifest is invalid; originals remain available in $backup_root"
+    return 1
+  fi
+
+  while IFS=$'\t' read -r \
+    target_relative state kind mode link_target _backup package source_relative; do
+    target_path=$target_root/$target_relative
+    source_path=$packages_root/$package/$source_relative
+    if link_points_to "$target_path" "$source_path"; then
+      if ! unlink -- "$target_path"; then
+        warn "could not remove installed target during rollback: $target_relative"
+        rollback_failed=true
+      fi
+    elif [[ "$state" == moved ]] &&
+      path_matches_copy \
+        "$target_path" "$backup_root/copies/$target_relative" "$kind" "$mode"; then
+      continue
+    elif [[ -e "$target_path" || -L "$target_path" ]]; then
+      warn "refusing to overwrite changed target during rollback: $target_relative"
+      rollback_failed=true
+    fi
+
+    if [[ "$state" == moved && ! -e "$target_path" && ! -L "$target_path" ]]; then
+      if ! mkdir -p -- "$(dirname -- "$target_path")" ||
+        ! mv -- "$backup_root/originals/$target_relative" "$target_path"; then
+        warn "could not restore original target during rollback: $target_relative"
+        rollback_failed=true
+      fi
+    elif [[ "$state" == managed && ! -e "$target_path" && ! -L "$target_path" ]]; then
+      if ! mkdir -p -- "$(dirname -- "$target_path")" ||
+        ! ln -s -- "$link_target" "$target_path"; then
+        warn "could not restore managed target during rollback: $target_relative"
+        rollback_failed=true
+      fi
+    fi
+  done <&3
+  exec 3<&-
+
+  for ((index=${#created_containers[@]} - 1; index >= 0; index--)); do
+    container_path=$target_root/${created_containers[$index]}
+    if ! rmdir -- "$container_path" 2>/dev/null && [[ -d "$container_path" ]]; then
+      warn "could not remove created container during rollback: ${created_containers[$index]}"
+      rollback_failed=true
+    fi
+  done
+
+  if $rollback_failed; then
+    printf 'rollback-incomplete\n' >"$backup_root/status"
+    warn "rollback was incomplete; originals remain available in $backup_root"
+    return 1
+  fi
+  printf 'rolled-back\n' >"$backup_root/status"
+}
+
+handle_error() {
+  local status=$?
+
+  trap - ERR
+  rollback "command failure"
+  exit "$status"
+}
+
+trap handle_error ERR
+trap 'rollback "interruption"; exit 130' INT TERM
+
+for target_relative in "${conflicts[@]}"; do
+  mv -- "$target_root/$target_relative" \
+    "$backup_root/originals/$target_relative"
+done
+
+ensure_target_containers "$target_root" "${packages[@]}"
+if ! run_stow "$target_root" --stow "${packages[@]}"; then
+  rollback "Stow failure"
+  exit 1
+fi
+
+verification_failed=false
+for entry in "${entries[@]}"; do
+  IFS=$'\t' read -r package source_relative target_relative <<<"$entry"
+  target_path=$target_root/$target_relative
+  source_path=$packages_root/$package/$source_relative
+  if ! link_points_to "$target_path" "$source_path"; then
+    warn "managed target is not the expected symlink: $target_relative"
+    verification_failed=true
+  fi
+done
+
+if $verification_failed; then
+  rollback "verification failure"
+  exit 1
+fi
+
+printf 'applied\n' >"$backup_root/status"
+transaction_active=false
+trap - ERR INT TERM
+info "Linked packages: ${packages[*]}"
+info "Backup and restore manifest: $backup_root"
+printf 'BACKUP_DIR=%s\n' "$backup_root"

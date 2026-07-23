@@ -1,0 +1,326 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+
+for script in "$repo_root/install" "$repo_root"/scripts/*; do
+  [[ -f "$script" ]] || continue
+  bash -n "$script"
+done
+
+if command -v shellcheck >/dev/null 2>&1; then
+  shellcheck -x -P "$repo_root/scripts" \
+    "$repo_root/install" "$repo_root"/scripts/{doctor,link,restore,test,unlink}
+else
+  printf 'warning: ShellCheck unavailable; static shell analysis skipped\n' >&2
+fi
+
+if command -v xmllint >/dev/null 2>&1; then
+  xmllint --html --noout "$repo_root/plans/dotfiles-repository-plan.html"
+fi
+
+if ! command -v stow >/dev/null 2>&1; then
+  printf 'error: GNU Stow 2.4.0 or newer is required for integration tests\n' >&2
+  exit 1
+fi
+
+test_root=$(mktemp -d)
+cleanup() {
+  rm -rf -- "$test_root"
+}
+trap cleanup EXIT
+
+fixture_packages=$test_root/packages
+fixture_manifest=$test_root/managed-paths.tsv
+fixture_state=$test_root/state
+test_home=$test_root/home
+mkdir -p \
+  "$fixture_packages/zsh" \
+  "$fixture_packages/zsh/dot-demo-dir" \
+  "$fixture_packages/codex/dot-codex" \
+  "$fixture_packages/agents/dot-agents/skills/demo" \
+  "$test_home"
+
+printf 'managed zsh\n' >"$fixture_packages/zsh/dot-zshrc"
+printf 'managed target\n' >"$fixture_packages/zsh/target"
+printf 'managed directory\n' >"$fixture_packages/zsh/dot-demo-dir/value"
+printf 'managed agents\n' >"$fixture_packages/codex/dot-codex/AGENTS.md"
+printf '%s\n' '---' 'name: demo' 'description: Fixture skill.' '---' \
+  >"$fixture_packages/agents/dot-agents/skills/demo/SKILL.md"
+printf '%s\n' \
+  $'zsh\tdot-zshrc\t.zshrc' \
+  $'zsh\ttarget\ttarget' \
+  $'zsh\tdot-demo-dir\t.demo-dir' \
+  $'codex\tdot-codex/AGENTS.md\t.codex/AGENTS.md' \
+  $'agents\tdot-agents/skills/demo\t.agents/skills/demo' \
+  >"$fixture_manifest"
+printf 'original zsh\n' >"$test_home/.zshrc"
+printf 'original target\n' >"$test_home/target"
+chmod 640 "$test_home/target"
+mkdir "$test_home/.demo-dir"
+printf 'original directory\n' >"$test_home/.demo-dir/value"
+printf 'unrelated\n' >"$test_home/unrelated"
+
+test_env=(
+  "DOTFILES_PACKAGES_ROOT=$fixture_packages"
+  "DOTFILES_MANAGED_PATHS_FILE=$fixture_manifest"
+  "DOTFILES_STATE_ROOT=$fixture_state"
+)
+
+set +e
+env "${test_env[@]}" "$repo_root/scripts/link" \
+  --dry-run --target /./ zsh >/dev/null 2>&1
+root_alias_status=$?
+set -e
+((root_alias_status != 0))
+
+symlink_home=$test_root/symlink-home
+outside_codex=$test_root/outside-codex
+mkdir -p "$symlink_home" "$outside_codex"
+ln -s "$outside_codex" "$symlink_home/.codex"
+set +e
+env "${test_env[@]}" "$repo_root/scripts/link" \
+  --dry-run --target "$symlink_home" codex >/dev/null 2>&1
+container_status=$?
+set -e
+((container_status != 0))
+[[ ! -e "$outside_codex/AGENTS.md" ]]
+
+env "${test_env[@]}" "$repo_root/scripts/link" --dry-run --target "$test_home"
+grep -qx 'original zsh' "$test_home/.zshrc"
+grep -qx 'original target' "$test_home/target"
+grep -qx 'original directory' "$test_home/.demo-dir/value"
+
+apply_output=$(env "${test_env[@]}" "$repo_root/scripts/link" --target "$test_home")
+backup_root=$(sed -n 's/^BACKUP_DIR=//p' <<<"$apply_output")
+[[ -n "$backup_root" && -f "$backup_root/manifest.tsv" ]]
+[[ -L "$test_home/.zshrc" ]]
+[[ -L "$test_home/target" ]]
+[[ -L "$test_home/.demo-dir" ]]
+[[ -d "$test_home/.codex" && ! -L "$test_home/.codex" ]]
+[[ -d "$test_home/.agents/skills" && ! -L "$test_home/.agents/skills" ]]
+grep -qx 'unrelated' "$test_home/unrelated"
+
+backup_count_before=$(find "$fixture_state/backups" -mindepth 1 -maxdepth 1 -type d |
+  wc -l)
+second_apply_output=$(env "${test_env[@]}" "$repo_root/scripts/link" --target "$test_home")
+[[ "$second_apply_output" == *"already linked"* ]]
+[[ "$second_apply_output" != *"BACKUP_DIR="* ]]
+backup_count_after=$(find "$fixture_state/backups" -mindepth 1 -maxdepth 1 -type d |
+  wc -l)
+[[ "$backup_count_before" == "$backup_count_after" ]]
+
+printf 'managed zprofile\n' >"$fixture_packages/zsh/dot-zprofile"
+printf '%s\n' $'zsh\tdot-zprofile\t.zprofile' >>"$fixture_manifest"
+mixed_apply_output=$(env "${test_env[@]}" "$repo_root/scripts/link" --target "$test_home")
+mixed_backup_root=$(sed -n 's/^BACKUP_DIR=//p' <<<"$mixed_apply_output")
+[[ -L "$test_home/.zprofile" ]]
+
+codex_link_target=$(readlink -- "$test_home/.codex/AGENTS.md")
+unlink -- "$test_home/.codex/AGENTS.md"
+ln -s "$fixture_packages/zsh/dot-zshrc" "$test_home/.codex/AGENTS.md"
+set +e
+env "${test_env[@]}" "$repo_root/scripts/restore" \
+  --target "$test_home" "$mixed_backup_root" >/dev/null 2>&1
+changed_link_status=$?
+set -e
+((changed_link_status != 0))
+unlink -- "$test_home/.codex/AGENTS.md"
+ln -s "$codex_link_target" "$test_home/.codex/AGENTS.md"
+
+env "${test_env[@]}" "$repo_root/scripts/restore" \
+  --target "$test_home" "$mixed_backup_root" >/dev/null
+[[ -L "$test_home/.zshrc" ]]
+[[ -L "$test_home/target" ]]
+[[ -L "$test_home/.demo-dir" ]]
+[[ -L "$test_home/.codex/AGENTS.md" ]]
+[[ -L "$test_home/.agents/skills/demo" ]]
+[[ ! -e "$test_home/.zprofile" && ! -L "$test_home/.zprofile" ]]
+env "${test_env[@]}" "$repo_root/scripts/unlink" --target "$test_home" >/dev/null
+[[ ! -e "$test_home/.zshrc" && ! -L "$test_home/.zshrc" ]]
+[[ ! -e "$test_home/target" && ! -L "$test_home/target" ]]
+[[ ! -e "$test_home/.demo-dir" && ! -L "$test_home/.demo-dir" ]]
+grep -qx 'unrelated' "$test_home/unrelated"
+
+real_cp=$(command -v cp)
+restore_fake_bin=$test_root/restore-fake-bin
+mkdir -p "$restore_fake_bin"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  "if [[ \"\${3:-}\" == \"\${FAIL_CP_SOURCE:-}\" ]]; then" \
+  "  printf \"partial copy\\n\" >\"\$4\"" \
+  '  exit 1' \
+  'fi' \
+  "exec \"\$REAL_CP\" \"\$@\"" \
+  >"$restore_fake_bin/cp"
+chmod +x "$restore_fake_bin/cp"
+set +e
+env "${test_env[@]}" \
+  "PATH=$restore_fake_bin:$PATH" \
+  "REAL_CP=$real_cp" \
+  "FAIL_CP_SOURCE=$backup_root/copies/.zshrc" \
+  "$repo_root/scripts/restore" --target "$test_home" "$backup_root" \
+  >/dev/null 2>&1
+interrupted_restore_status=$?
+set -e
+((interrupted_restore_status != 0))
+[[ ! -e "$test_home/.zshrc" && ! -L "$test_home/.zshrc" ]]
+grep -qx 'restoring' "$backup_root/status"
+[[ -z "$(find "$test_home" -name '.dotfiles-restore.*' -print -quit)" ]]
+
+restore_real_mv=$(command -v mv)
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  "last_argument=\${!#}" \
+  "if [[ \"\$last_argument\" == \"\${FAIL_MV_TARGET:-}\" ]]; then" \
+  "  mkdir -- \"\$last_argument\"" \
+  "  printf \"newer directory\\n\" >\"\$last_argument/newer\"" \
+  'fi' \
+  "exec \"\$REAL_MV\" \"\$@\"" \
+  >"$restore_fake_bin/mv"
+chmod +x "$restore_fake_bin/mv"
+set +e
+env "${test_env[@]}" \
+  "PATH=$restore_fake_bin:$PATH" \
+  "REAL_CP=$real_cp" \
+  "REAL_MV=$restore_real_mv" \
+  "FAIL_MV_TARGET=$test_home/.demo-dir" \
+  "$repo_root/scripts/restore" --target "$test_home" "$backup_root" \
+  >/dev/null 2>&1
+directory_race_status=$?
+set -e
+((directory_race_status != 0))
+grep -qx 'newer directory' "$test_home/.demo-dir/newer"
+[[ ! -e "$test_home/.demo-dir/item" && ! -L "$test_home/.demo-dir/item" ]]
+rm -rf -- "$test_home/.demo-dir"
+
+env "${test_env[@]}" "$repo_root/scripts/restore" --target "$test_home" "$backup_root"
+grep -qx 'original zsh' "$test_home/.zshrc"
+grep -qx 'original target' "$test_home/target"
+[[ "$(stat -c '%a' "$test_home/target")" == 640 ]]
+grep -qx 'original directory' "$test_home/.demo-dir/value"
+grep -qx 'unrelated' "$test_home/unrelated"
+[[ ! -e "$test_home/.codex" && ! -L "$test_home/.codex" ]]
+[[ ! -e "$test_home/.agents" && ! -L "$test_home/.agents" ]]
+
+real_stow=$(command -v stow)
+fake_bin=$test_root/fake-bin
+mkdir -p "$fake_bin"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  "for argument in \"\$@\"; do" \
+  "  if [[ \"\$argument\" == \"--target=\${FAIL_STOW_TARGET:-}\" ]]; then" \
+  "    \"\$REAL_STOW\" \"\$@\"" \
+  "    case \"\${STOW_INJECT_MODE:-failure}\" in" \
+  '      failure) exit 1 ;;' \
+  '      regular)' \
+  "        unlink -- \"\${FAIL_STOW_TARGET}/.zshrc\"" \
+  "        printf \"injected regular file\\n\" >\"\${FAIL_STOW_TARGET}/.zshrc\"" \
+  '        exit 0' \
+  '        ;;' \
+  '    esac' \
+  '  fi' \
+  'done' \
+  "exec \"\$REAL_STOW\" \"\$@\"" \
+  >"$fake_bin/stow"
+chmod +x "$fake_bin/stow"
+set +e
+env "${test_env[@]}" \
+  "PATH=$fake_bin:$PATH" \
+  "REAL_STOW=$real_stow" \
+  "FAIL_STOW_TARGET=$test_home" \
+  "$repo_root/scripts/link" --target "$test_home" >/dev/null 2>&1
+rollback_status=$?
+set -e
+((rollback_status != 0))
+grep -qx 'original zsh' "$test_home/.zshrc"
+latest_status=$(find "$fixture_state/backups" -name status -type f -printf '%T@ %p\n' |
+  sort -n | tail -n 1 | cut -d ' ' -f 2-)
+grep -qx 'rolled-back' "$latest_status"
+
+printf '%s\n' '#!/usr/bin/env bash' 'exit 1' >"$fake_bin/unlink"
+chmod +x "$fake_bin/unlink"
+set +e
+env "${test_env[@]}" \
+  "PATH=$fake_bin:$PATH" \
+  "REAL_STOW=$real_stow" \
+  "FAIL_STOW_TARGET=$test_home" \
+  "$repo_root/scripts/link" --target "$test_home" >/dev/null 2>&1
+incomplete_status=$?
+set -e
+((incomplete_status != 0))
+latest_status=$(find "$fixture_state/backups" -name status -type f -printf '%T@ %p\n' |
+  sort -n | tail -n 1 | cut -d ' ' -f 2-)
+grep -qx 'rollback-incomplete' "$latest_status"
+incomplete_backup_root=$(dirname -- "$latest_status")
+grep -qx 'original zsh' "$incomplete_backup_root/originals/.zshrc"
+unlink -- "$fake_bin/unlink"
+env "${test_env[@]}" "$repo_root/scripts/unlink" --target "$test_home" >/dev/null
+env "${test_env[@]}" "$repo_root/scripts/restore" \
+  --target "$test_home" "$incomplete_backup_root" >/dev/null
+grep -qx 'original zsh' "$test_home/.zshrc"
+
+set +e
+env "${test_env[@]}" \
+  "PATH=$fake_bin:$PATH" \
+  "REAL_STOW=$real_stow" \
+  "FAIL_STOW_TARGET=$test_home" \
+  "STOW_INJECT_MODE=regular" \
+  "$repo_root/scripts/link" --target "$test_home" >/dev/null 2>&1
+regular_status=$?
+set -e
+((regular_status != 0))
+grep -qx 'injected regular file' "$test_home/.zshrc"
+latest_status=$(find "$fixture_state/backups" -name status -type f -printf '%T@ %p\n' |
+  sort -n | tail -n 1 | cut -d ' ' -f 2-)
+grep -qx 'rollback-incomplete' "$latest_status"
+regular_backup_root=$(dirname -- "$latest_status")
+unlink -- "$test_home/.zshrc"
+env "${test_env[@]}" "$repo_root/scripts/restore" \
+  --target "$test_home" "$regular_backup_root" >/dev/null
+grep -qx 'original zsh' "$test_home/.zshrc"
+
+real_mv=$(command -v mv)
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  "if [[ \"\${2:-}\" == \"\${FAIL_MV_SOURCE:-}\" ]]; then" \
+  "  chmod 600 -- \"\$2\"" \
+  '  exit 1' \
+  'fi' \
+  "exec \"\$REAL_MV\" \"\$@\"" \
+  >"$fake_bin/mv"
+chmod +x "$fake_bin/mv"
+set +e
+env "${test_env[@]}" \
+  "PATH=$fake_bin:$PATH" \
+  "REAL_MV=$real_mv" \
+  "REAL_STOW=$real_stow" \
+  "FAIL_MV_SOURCE=$test_home/target" \
+  "$repo_root/scripts/link" --target "$test_home" >/dev/null 2>&1
+metadata_status=$?
+set -e
+((metadata_status != 0))
+grep -qx 'original zsh' "$test_home/.zshrc"
+grep -qx 'original target' "$test_home/target"
+[[ "$(stat -c '%a' "$test_home/target")" == 600 ]]
+latest_status=$(find "$fixture_state/backups" -name status -type f -printf '%T@ %p\n' |
+  sort -n | tail -n 1 | cut -d ' ' -f 2-)
+grep -qx 'rollback-incomplete' "$latest_status"
+metadata_backup_root=$(dirname -- "$latest_status")
+[[ "$(stat -c '%a' "$metadata_backup_root/copies/target")" == 640 ]]
+chmod 640 "$test_home/target"
+unlink -- "$fake_bin/mv"
+env "${test_env[@]}" "$repo_root/scripts/restore" \
+  --target "$test_home" "$metadata_backup_root" >/dev/null
+
+mv "$fixture_packages/zsh/dot-zshrc" "$test_root/managed-zshrc"
+ln -s missing-zshrc "$fixture_packages/zsh/dot-zshrc"
+set +e
+env "${test_env[@]}" "$repo_root/scripts/link" --target "$test_home" >/dev/null 2>&1
+dangling_status=$?
+set -e
+((dangling_status != 0))
+grep -qx 'original zsh' "$test_home/.zshrc"
+
+printf 'All tests passed\n'

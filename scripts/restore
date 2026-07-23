@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=lib.sh
+source "$script_dir/lib.sh"
+
+target_root=$HOME
+if [[ "${1:-}" == "--target" ]]; then
+  (($# >= 3)) || die "usage: ${0##*/} [--target DIR] BACKUP_DIR"
+  target_root=$2
+  shift 2
+fi
+(($# == 1)) || die "usage: ${0##*/} [--target DIR] BACKUP_DIR"
+
+backup_root=$1
+manifest=$backup_root/manifest.tsv
+[[ -f "$manifest" ]] || die "backup manifest not found: $manifest"
+target_root=$(canonical_target_root "$target_root")
+
+expected_manifest_header=$'target\tstate\ttype\tmode\tsymlink_target\tbackup\tpackage\tsource'
+exec 3<"$manifest"
+IFS= read -r manifest_header <&3 || die "backup manifest is empty: $manifest"
+[[ "$manifest_header" == "$expected_manifest_header" ]] ||
+  die "backup manifest has an invalid header: $manifest"
+
+declare -a rows=()
+declare -A seen_targets=()
+while IFS=$'\t' read -r \
+  target_relative state kind mode link_target backup package source_relative; do
+  validate_relative_path "$target_relative" ||
+    die "unsafe target path in backup manifest: $target_relative"
+  [[ "$package" =~ ^[a-z0-9][a-z0-9._-]*$ ]] ||
+    die "invalid package in backup manifest: $package"
+  validate_relative_path "$source_relative" ||
+    die "unsafe source path in backup manifest: $source_relative"
+  [[ -z "${seen_targets[$target_relative]:-}" ]] ||
+    die "duplicate target in backup manifest: $target_relative"
+  seen_targets[$target_relative]=1
+  case "$state" in
+    moved)
+      [[ "$backup" == "copies/$target_relative" ]] ||
+        die "invalid backup path for target: $target_relative"
+      ;;
+    managed)
+      [[ "$kind" == symlink && "$link_target" != - && "$backup" == - ]] ||
+        die "invalid managed entry for target: $target_relative"
+      ;;
+    absent)
+      [[ "$kind" == absent && "$link_target" == - && "$backup" == - ]] ||
+        die "invalid absent entry for target: $target_relative"
+      ;;
+    *)
+      die "invalid state in backup manifest: $state"
+      ;;
+  esac
+  validate_target_ancestor_path "$target_root" "$target_relative"
+  rows+=(
+    "$target_relative"$'\t'"$state"$'\t'"$kind"$'\t'"$mode"$'\t'"$link_target"$'\t'"$backup"$'\t'"$package"$'\t'"$source_relative"
+  )
+  target_path=$target_root/$target_relative
+  if [[ -e "$target_path" || -L "$target_path" ]]; then
+    if link_points_to \
+      "$target_path" "$packages_root/$package/$source_relative"; then
+      :
+    elif [[ "$state" == moved ]] &&
+      path_matches_copy "$target_path" "$backup_root/$backup" "$kind" "$mode"; then
+      :
+    elif [[ "$state" == managed && -L "$target_path" &&
+      "$(readlink -- "$target_path")" == "$link_target" ]]; then
+      :
+    else
+      die "refusing to overwrite current target: $target_relative"
+    fi
+  fi
+  if [[ "$state" == moved ]]; then
+    [[ -e "$backup_root/$backup" || -L "$backup_root/$backup" ]] ||
+      die "backup content is missing: $backup"
+  fi
+done <&3
+exec 3<&-
+
+created_containers=()
+created_containers_file=$backup_root/created-containers
+if [[ -f "$created_containers_file" ]]; then
+  mapfile -t created_containers <"$created_containers_file"
+  for container in "${created_containers[@]}"; do
+    [[ -n "$container" ]] || continue
+    case "$container" in
+      .codex|.agents|.agents/skills) ;;
+      *) die "invalid created container in backup: $container" ;;
+    esac
+  done
+fi
+
+restore_temp_dirs=()
+cleanup_restore_temps() {
+  local temporary_directory
+
+  for temporary_directory in "${restore_temp_dirs[@]}"; do
+    rm -rf -- "$temporary_directory"
+  done
+}
+trap cleanup_restore_temps EXIT
+
+restore_copy_atomically() {
+  local source=$1
+  local target=$2
+  local kind=$3
+  local mode=$4
+  local parent temporary_directory temporary_item
+
+  parent=$(dirname -- "$target")
+  mkdir -p -- "$parent"
+  temporary_directory=$(mktemp -d -- "$parent/.dotfiles-restore.XXXXXX")
+  restore_temp_dirs+=("$temporary_directory")
+  temporary_item=$temporary_directory/item
+  cp -a -- "$source" "$temporary_item"
+  path_matches_copy "$temporary_item" "$source" "$kind" "$mode" ||
+    die "restored copy verification failed for: $target"
+  mv --no-clobber --no-target-directory -- "$temporary_item" "$target"
+  path_matches_copy "$target" "$source" "$kind" "$mode" ||
+    die "refusing changed target during restore: $target"
+  rmdir -- "$temporary_directory"
+}
+
+printf 'restoring\n' >"$backup_root/status"
+for row in "${rows[@]}"; do
+  IFS=$'\t' read -r \
+    target_relative state kind mode link_target backup package source_relative <<<"$row"
+  target_path=$target_root/$target_relative
+  if link_points_to "$target_path" "$packages_root/$package/$source_relative"; then
+    unlink -- "$target_path"
+  fi
+  if [[ "$state" == moved && ! -e "$target_path" && ! -L "$target_path" ]]; then
+    restore_copy_atomically \
+      "$backup_root/$backup" "$target_path" "$kind" "$mode"
+  elif [[ "$state" == managed && ! -e "$target_path" && ! -L "$target_path" ]]; then
+    mkdir -p -- "$(dirname -- "$target_path")"
+    ln -s -- "$link_target" "$target_path"
+  fi
+done
+
+for ((index=${#created_containers[@]} - 1; index >= 0; index--)); do
+  container=${created_containers[$index]}
+  [[ -n "$container" ]] || continue
+  rmdir -- "$target_root/$container" 2>/dev/null || true
+done
+
+printf 'restored\n' >"$backup_root/status"
+info "Restored backup: $backup_root"

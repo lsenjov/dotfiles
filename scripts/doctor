@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=lib.sh
+source "$script_dir/lib.sh"
+
+core_only=false
+initialize_submodules=false
+while (($# > 0)); do
+  case "$1" in
+    --core-only)
+      core_only=true
+      ;;
+    --init-submodules)
+      initialize_submodules=true
+      ;;
+    *)
+      die "usage: ${0##*/} [--core-only] [--init-submodules]"
+      ;;
+  esac
+  shift
+done
+
+missing=()
+for command_name in git zsh perl stow; do
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    missing+=("$command_name")
+  fi
+done
+
+if ((${#missing[@]} > 0)); then
+  printf 'Missing required commands: %s\n' "${missing[*]}" >&2
+  if [[ -r /etc/os-release ]]; then
+    # shellcheck disable=SC1091
+    source /etc/os-release
+    if [[ "${ID:-} ${ID_LIKE:-}" == *arch* ]]; then
+      printf 'Install them with: sudo pacman -S --needed git zsh perl stow\n' >&2
+    fi
+  fi
+  exit 1
+fi
+
+require_stow
+
+if $initialize_submodules; then
+  info "Initializing recursive submodules"
+  git -C "$repo_root" submodule update --init --recursive
+fi
+if ! submodule_status=$(git -C "$repo_root" submodule status --recursive 2>&1); then
+  printf '%s\n' "$submodule_status" >&2
+  die "unable to inspect recursive submodule state"
+fi
+if grep -Eq '^[-+U]' <<<"$submodule_status"; then
+  die "submodules are uninitialized, conflicted, or not at their recorded revisions"
+fi
+
+info "Git $(git --version | awk '{print $3}')"
+info "Zsh ${ZSH_VERSION:-$(zsh --version | awk '{print $2}')}"
+info "GNU Stow $(stow_version)"
+info "Optional login-shell command: chsh -s $(command -v zsh)"
+
+if ! $core_only; then
+  if command -v shellcheck >/dev/null 2>&1; then
+    info "ShellCheck $(shellcheck --version | awk '/^version:/ {print $2}')"
+  else
+    warn "ShellCheck is not installed; on CachyOS: sudo pacman -S --needed shellcheck"
+  fi
+
+  if command -v xmllint >/dev/null 2>&1; then
+    info "xmllint available"
+  else
+    warn "xmllint is not installed; HTML validation will be skipped"
+  fi
+fi
+
+info "Environment check passed"

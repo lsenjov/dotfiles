@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=lib.sh
+source "$script_dir/lib.sh"
+
+target_root=$HOME
+packages=()
+
+while (($# > 0)); do
+  case "$1" in
+    --target)
+      (($# >= 2)) || die "--target requires a directory"
+      target_root=$2
+      shift 2
+      ;;
+    --*)
+      die "unknown option: $1"
+      ;;
+    *)
+      packages+=("$1")
+      shift
+      ;;
+  esac
+done
+
+target_root=$(canonical_target_root "$target_root")
+if ((${#packages[@]} == 0)); then
+  mapfile -t packages < <(load_default_packages)
+fi
+
+require_stow
+validate_packages "${packages[@]}"
+verify_package_coverage "${packages[@]}"
+validate_target_ancestors "$target_root" "${packages[@]}"
+
+info "Unlink simulation"
+run_stow "$target_root" --simulate --delete "${packages[@]}"
+run_stow "$target_root" --delete "${packages[@]}"
+info "Unlinked packages: ${packages[*]}"
+info "Backups are not restored automatically; use scripts/restore BACKUP_DIR"
