@@ -24,7 +24,7 @@ while (($# > 0)); do
 done
 
 missing=()
-for command_name in git zsh perl stow; do
+for command_name in git zsh perl stow fzf; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     missing+=("$command_name")
   fi
@@ -36,9 +36,23 @@ if ((${#missing[@]} > 0)); then
     # shellcheck disable=SC1091
     source /etc/os-release
     if [[ "${ID:-} ${ID_LIKE:-}" == *arch* ]]; then
-      printf 'Install them with: sudo pacman -S --needed git zsh perl stow\n' >&2
+      printf 'Install them with: sudo pacman -S --needed git zsh perl stow fzf\n' >&2
     fi
   fi
+  exit 1
+fi
+
+missing_runtime_files=()
+for relative_path in .cargo/env .local/bin/env; do
+  [[ -r "$HOME/$relative_path" ]] || missing_runtime_files+=("$relative_path")
+done
+if ((${#missing_runtime_files[@]} > 0)); then
+  printf 'Missing files required by the managed .zshrc: %s\n' \
+    "${missing_runtime_files[*]}" >&2
+  printf '%s\n' \
+    'Create non-destructive placeholders with:' \
+    "  mkdir -p -- \"\$HOME/.cargo\" \"\$HOME/.local/bin\"" \
+    "  touch -- \"\$HOME/.cargo/env\" \"\$HOME/.local/bin/env\"" >&2
   exit 1
 fi
 

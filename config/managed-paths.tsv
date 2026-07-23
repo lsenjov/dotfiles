@@ -1,1 +1,9 @@
 # package	source path	target path
+zsh	dot-zprezto	.zprezto
+zsh	dot-zshenv	.zshenv
+zsh	dot-zprofile	.zprofile
+zsh	dot-zshrc	.zshrc
+zsh	dot-zlogin	.zlogin
+zsh	dot-zlogout	.zlogout
+zsh	dot-zpreztorc	.zpreztorc
+zsh	dot-p10k.zsh	.p10k.zsh
