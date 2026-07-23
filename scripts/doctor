@@ -24,7 +24,7 @@ while (($# > 0)); do
 done
 
 missing=()
-for command_name in git zsh perl stow fzf; do
+for command_name in cmp diff git zsh perl stow fzf; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     missing+=("$command_name")
   fi
@@ -36,7 +36,9 @@ if ((${#missing[@]} > 0)); then
     # shellcheck disable=SC1091
     source /etc/os-release
     if [[ "${ID:-} ${ID_LIKE:-}" == *arch* ]]; then
-      printf 'Install them with: sudo pacman -S --needed git zsh perl stow fzf\n' >&2
+      printf '%s\n' \
+        'Install them with: sudo pacman -S --needed diffutils git zsh perl stow fzf' \
+        >&2
     fi
   fi
   exit 1
@@ -76,16 +78,29 @@ info "GNU Stow $(stow_version)"
 info "Optional login-shell command: chsh -s $(command -v zsh)"
 
 if ! $core_only; then
-  if command -v shellcheck >/dev/null 2>&1; then
-    info "ShellCheck $(shellcheck --version | awk '/^version:/ {print $2}')"
-  else
-    warn "ShellCheck is not installed; on CachyOS: sudo pacman -S --needed shellcheck"
-  fi
+  development_packages=()
 
-  if command -v xmllint >/dev/null 2>&1; then
-    info "xmllint available"
+  if ! command -v python3 >/dev/null 2>&1; then
+    development_packages+=(python)
+  elif ! python3 -c 'import yaml' >/dev/null 2>&1; then
+    development_packages+=(python-yaml)
+  fi
+  command -v script >/dev/null 2>&1 ||
+    development_packages+=(util-linux)
+  command -v shellcheck >/dev/null 2>&1 ||
+    development_packages+=(shellcheck)
+  command -v xmllint >/dev/null 2>&1 ||
+    development_packages+=(libxml2)
+  command -v gitleaks >/dev/null 2>&1 ||
+    development_packages+=(gitleaks)
+  command -v actionlint >/dev/null 2>&1 ||
+    development_packages+=(actionlint)
+
+  if ((${#development_packages[@]} > 0)); then
+    warn "development verification is incomplete; on CachyOS:"
+    printf '  sudo pacman -S --needed %s\n' "${development_packages[*]}" >&2
   else
-    warn "xmllint is not installed; HTML validation will be skipped"
+    info "Development verification tools available"
   fi
 fi
 

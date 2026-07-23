@@ -4,8 +4,16 @@ set -euo pipefail
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 
+for command_name in cmp diff git perl python3 script stow zsh; do
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    printf 'error: %s is required for repository tests\n' "$command_name" >&2
+    exit 1
+  fi
+done
+
 for script in "$repo_root/install" "$repo_root"/scripts/*; do
   [[ -f "$script" ]] || continue
+  [[ "$(head -n 1 "$script")" == '#!/usr/bin/env bash' ]] || continue
   bash -n "$script"
 done
 
@@ -20,10 +28,43 @@ if command -v xmllint >/dev/null 2>&1; then
   xmllint --html --noout "$repo_root/plans/dotfiles-repository-plan.html"
 fi
 
-if ! command -v stow >/dev/null 2>&1; then
-  printf 'error: GNU Stow 2.4.0 or newer is required for integration tests\n' >&2
+if command -v actionlint >/dev/null 2>&1; then
+  actionlint "$repo_root/.github/workflows/verify.yml"
+fi
+
+"$repo_root/scripts/validate-skills"
+
+if find "$repo_root/packages/agents" "$repo_root/packages/codex" \
+  \( -name .git -o -name __pycache__ -o -name '*.py[cod]' \) \
+  -print -quit | grep -q .; then
+  printf 'error: managed Codex content contains repository or cache metadata\n' >&2
   exit 1
 fi
+
+if find "$repo_root/packages/agents" "$repo_root/packages/codex" -type f \
+  \( -name auth.json -o -name '*.sqlite' -o -name '*.sqlite3' \
+  -o -name '*.sqlite-wal' -o -name '*.db' \) \
+  -print -quit | grep -q .; then
+  printf 'error: managed Codex content contains a forbidden runtime file\n' >&2
+  exit 1
+fi
+
+submodule_status=$(git -C "$repo_root" submodule status --recursive)
+if grep -Eq '^[-+U]' <<<"$submodule_status"; then
+  printf 'error: submodules are not initialized at their recorded revisions\n' >&2
+  exit 1
+fi
+
+for zsh_file in \
+  dot-zshenv \
+  dot-zprofile \
+  dot-zshrc \
+  dot-zlogin \
+  dot-zlogout \
+  dot-zpreztorc \
+  dot-p10k.zsh; do
+  zsh -n "$repo_root/packages/zsh/$zsh_file"
+done
 
 test_root=$(mktemp -d)
 cleanup() {
@@ -322,5 +363,85 @@ dangling_status=$?
 set -e
 ((dangling_status != 0))
 grep -qx 'original zsh' "$test_home/.zshrc"
+
+managed_home=$test_root/managed-home
+managed_state=$test_root/managed-state
+mkdir -p "$managed_home/.cargo" "$managed_home/.local/bin"
+touch "$managed_home/.cargo/env" "$managed_home/.local/bin/env"
+
+full_apply_output=$(
+  DOTFILES_STATE_ROOT="$managed_state" \
+    "$repo_root/scripts/link" --target "$managed_home"
+)
+[[ "$full_apply_output" == *"Linked packages:"* ]]
+
+while IFS=$'\t' read -r package source_relative target_relative extra; do
+  [[ -z "$package" || "$package" == \#* ]] && continue
+  [[ -z "$extra" ]]
+  target_path=$managed_home/$target_relative
+  source_path=$repo_root/packages/$package/$source_relative
+  [[ -L "$target_path" ]]
+  [[ "$(readlink -m -- "$target_path")" == "$(readlink -m -- "$source_path")" ]]
+done <"$repo_root/config/managed-paths.tsv"
+
+[[ -z "$(find "$managed_home" -xtype l -print -quit)" ]]
+full_backup_count_before=$(
+  find "$managed_state/backups" -mindepth 1 -maxdepth 1 -type d | wc -l
+)
+full_second_output=$(
+  DOTFILES_STATE_ROOT="$managed_state" \
+    "$repo_root/scripts/link" --target "$managed_home"
+)
+[[ "$full_second_output" == *"already linked"* ]]
+full_backup_count_after=$(
+  find "$managed_state/backups" -mindepth 1 -maxdepth 1 -type d | wc -l
+)
+[[ "$full_backup_count_before" == "$full_backup_count_after" ]]
+
+printf -v startup_command \
+  'env HOME=%q ZDOTDIR=%q TERM=xterm-256color zsh -d -i -c exit' \
+  "$managed_home" "$managed_home"
+script --quiet --return --command "$startup_command" /dev/null \
+  >"$test_root/zsh-startup.log" 2>"$test_root/zsh-startup.stderr"
+[[ ! -s "$test_root/zsh-startup.log" ]]
+[[ ! -s "$test_root/zsh-startup.stderr" ]]
+
+DOTFILES_STATE_ROOT="$managed_state" \
+  "$repo_root/scripts/unlink" --target "$managed_home" >/dev/null
+while IFS=$'\t' read -r package _source_relative target_relative extra; do
+  [[ -z "$package" || "$package" == \#* ]] && continue
+  [[ -z "$extra" ]]
+  [[ ! -e "$managed_home/$target_relative" ]]
+  [[ ! -L "$managed_home/$target_relative" ]]
+done <"$repo_root/config/managed-paths.tsv"
+[[ -f "$managed_home/.cargo/env" ]]
+[[ -f "$managed_home/.local/bin/env" ]]
+
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks git --redact --no-banner --verbose "$repo_root"
+  gitleaks dir --redact --no-banner --verbose "$repo_root"
+
+  gitleaks_fixture=$test_root/gitleaks-allowlist
+  gitleaks_fixture_file=$gitleaks_fixture/packages/agents/dot-agents/skills/code-review-skill/reference/java.md
+  mkdir -p -- "$(dirname -- "$gitleaks_fixture_file")"
+  documented_fake=$(printf 'sk_%s_12345' live)
+  printf 'private String apiKey = "%s";\n' "$documented_fake" \
+    >"$gitleaks_fixture_file"
+  gitleaks dir --config "$repo_root/.gitleaks.toml" --redact --no-banner \
+    "$gitleaks_fixture" >/dev/null
+  printf 'private String apiKey = "%sabcdef123456";\n' "$documented_fake" \
+    >"$gitleaks_fixture_file"
+  set +e
+  gitleaks dir --config "$repo_root/.gitleaks.toml" --redact --no-banner \
+    "$gitleaks_fixture" >/dev/null 2>&1
+  gitleaks_allowlist_status=$?
+  set -e
+  if ((gitleaks_allowlist_status == 0)); then
+    printf 'error: Gitleaks allowlist accepted a longer same-path secret\n' >&2
+    exit 1
+  fi
+else
+  printf 'warning: Gitleaks unavailable; secret scanning skipped\n' >&2
+fi
 
 printf 'All tests passed\n'

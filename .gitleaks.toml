@@ -1,0 +1,14 @@
+title = "Dotfiles secret scanning"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "The Java review guide demonstrates a deliberately fake hard-coded key."
+condition = "AND"
+regexTarget = "line"
+regexes = ['''^\s*private String apiKey = "sk_live_12345";\s*$''']
+paths = ['''packages/agents/dot-agents/skills/code-review-skill/reference/java\.md$''']

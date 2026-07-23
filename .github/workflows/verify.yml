@@ -1,0 +1,62 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    container: archlinux:base
+
+    steps:
+      - name: Install verification tools
+        run: >-
+          pacman -Syu --noconfirm --needed
+          actionlint
+          diffutils
+          fzf
+          git
+          gitleaks
+          libxml2
+          perl
+          python
+          python-yaml
+          shellcheck
+          stow
+          util-linux
+          zsh
+
+      # Mutable action tags would allow CI to execute code that was not reviewed here.
+      - name: Check out the repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Create shell runtime prerequisites
+        run: |
+          mkdir -p -- "$HOME/.cargo" "$HOME/.local/bin"
+          touch -- "$HOME/.cargo/env" "$HOME/.local/bin/env"
+
+      - name: Validate workflow syntax
+        run: actionlint
+
+      - name: Run repository verification
+        run: ./scripts/test
+
+      - name: Scan history and tracked content for secrets
+        run: |
+          gitleaks git --redact --no-banner .
+          scan_root=$(mktemp -d)
+          git archive --format=tar HEAD | tar -xf - -C "$scan_root"
+          gitleaks dir --redact --no-banner "$scan_root"

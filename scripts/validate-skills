@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""Validate managed skill structure and local resources."""
+
+from pathlib import Path
+import re
+import sys
+from urllib.parse import unquote
+
+try:
+    import yaml
+except ModuleNotFoundError:
+    print(
+        "error: PyYAML is required; on CachyOS: "
+        "sudo pacman -S --needed python-yaml",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+
+
+LINK_PATTERN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+FIELD_PATTERN = re.compile(r"^([A-Za-z][A-Za-z0-9_-]*):[ \t]*(.*)$")
+NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+ALLOWED_FIELDS = {"allowed-tools", "description", "license", "metadata", "name"}
+
+
+def fail(message: str) -> None:
+    print(f"error: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def read_frontmatter(skill_file: Path) -> dict[str, object]:
+    lines = skill_file.read_text(encoding="utf-8").splitlines()
+    if not lines or lines[0] != "---":
+        fail(f"{skill_file}: missing opening frontmatter delimiter")
+    try:
+        end = lines.index("---", 1)
+    except ValueError:
+        fail(f"{skill_file}: missing closing frontmatter delimiter")
+
+    frontmatter = lines[1:end]
+    seen_fields = set()
+    for line in frontmatter:
+        match = FIELD_PATTERN.match(line)
+        if match:
+            if match.group(1) in seen_fields:
+                fail(f"{skill_file}: duplicate frontmatter field: {match.group(1)}")
+            seen_fields.add(match.group(1))
+
+    try:
+        fields = yaml.safe_load("\n".join(frontmatter))
+    except yaml.YAMLError as error:
+        fail(f"{skill_file}: invalid YAML frontmatter: {error}")
+    if not isinstance(fields, dict):
+        fail(f"{skill_file}: frontmatter must be a mapping")
+
+    unexpected = sorted(set(fields) - ALLOWED_FIELDS)
+    if unexpected:
+        fail(f"{skill_file}: unsupported frontmatter fields: {', '.join(unexpected)}")
+    return fields
+
+
+def validate_links(skill_dir: Path, text: str) -> None:
+    root = skill_dir.resolve()
+    for raw_destination in LINK_PATTERN.findall(text):
+        destination = raw_destination.strip().split(maxsplit=1)[0].strip("<>")
+        destination = unquote(destination.split("#", 1)[0])
+        if not destination or destination.startswith(("#", "mailto:")) or "://" in destination:
+            continue
+        resolved = (skill_dir / destination).resolve()
+        if not resolved.is_relative_to(root):
+            fail(f"{skill_dir}: linked resource escapes the skill: {destination}")
+        if not resolved.exists():
+            fail(f"{skill_dir}: linked resource is missing: {destination}")
+
+
+def validate_openai_metadata(skill_dir: Path) -> None:
+    metadata = skill_dir / "agents/openai.yaml"
+    if not metadata.exists():
+        return
+    try:
+        document = yaml.safe_load(metadata.read_text(encoding="utf-8"))
+    except yaml.YAMLError as error:
+        fail(f"{metadata}: invalid YAML: {error}")
+    if not isinstance(document, dict) or not isinstance(document.get("interface"), dict):
+        fail(f"{metadata}: interface mapping is missing")
+    interface = document["interface"]
+    for field in ("display_name", "short_description", "default_prompt"):
+        if not isinstance(interface.get(field), str) or not interface[field].strip():
+            fail(f"{metadata}: {field} is missing")
+
+
+def validate_skill(skill_dir: Path) -> None:
+    skill_files = list(skill_dir.rglob("SKILL.md"))
+    expected_skill_file = skill_dir / "SKILL.md"
+    if skill_files != [expected_skill_file]:
+        fail(f"{skill_dir}: expected exactly one root SKILL.md")
+
+    fields = read_frontmatter(expected_skill_file)
+    name = fields.get("name", "")
+    if not isinstance(name, str) or not NAME_PATTERN.fullmatch(name):
+        fail(f"{expected_skill_file}: invalid or missing name")
+    if len(name) > 64:
+        fail(f"{expected_skill_file}: name exceeds 64 characters")
+    if name != skill_dir.name:
+        fail(f"{expected_skill_file}: name does not match its directory")
+
+    description = fields.get("description", "")
+    if not isinstance(description, str) or not description.strip():
+        fail(f"{expected_skill_file}: invalid or missing description")
+    if "<" in description or ">" in description:
+        fail(f"{expected_skill_file}: description contains an angle bracket")
+    if len(description.strip()) > 1024:
+        fail(f"{expected_skill_file}: description exceeds 1024 characters")
+
+    text = expected_skill_file.read_text(encoding="utf-8")
+    validate_links(skill_dir, text)
+    validate_openai_metadata(skill_dir)
+
+    if name == "frontend-design":
+        for required in ("LICENSE.txt", "ORIGIN.md"):
+            if not (skill_dir / required).is_file():
+                fail(f"{skill_dir}: required attribution file is missing: {required}")
+
+    print(f"{name}: valid")
+
+
+def main() -> None:
+    repo_root = Path(__file__).resolve().parent.parent
+    skills_root = repo_root / "packages/agents/dot-agents/skills"
+    skill_dirs = sorted(path for path in skills_root.iterdir() if path.is_dir())
+    if not skill_dirs:
+        fail(f"{skills_root}: no managed skills found")
+    for skill_dir in skill_dirs:
+        validate_skill(skill_dir)
+
+
+if __name__ == "__main__":
+    main()
