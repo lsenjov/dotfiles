@@ -859,7 +859,7 @@
           </article>
           <article class="card">
             <h3>Runcom comparison</h3>
-            <p><code>.zshenv</code>, <code>.zprofile</code>, <code>.zlogin</code>, <code>.zlogout</code>, and <code>.zpreztorc</code> match the fork. <code>~/.zshrc</code> differs only by a ForgeCode-added <code>~/.local/bin</code> path export.</p>
+            <p>All six active runcoms—<code>.zshenv</code>, <code>.zprofile</code>, <code>.zshrc</code>, <code>.zlogin</code>, <code>.zlogout</code>, and <code>.zpreztorc</code>—match the clean personal fork.</p>
           </article>
           <article class="card">
             <h3>Prompt configuration</h3>
@@ -888,7 +888,7 @@
 │   │   ├── dot-zprezto/            # lsenjov/prezto submodule
 │   │   ├── dot-zshenv              # Relative link to Prezto runcom
 │   │   ├── dot-zprofile            # Relative link to Prezto runcom
-│   │   ├── dot-zshrc               # First-party wrapper around runcom
+│   │   ├── dot-zshrc               # Relative link to Prezto runcom
 │   │   ├── dot-zlogin              # Relative link to Prezto runcom
 │   │   ├── dot-zlogout             # Relative link to Prezto runcom
 │   │   ├── dot-zpreztorc           # Relative link to Prezto runcom
@@ -955,8 +955,7 @@
         <ol>
           <li>Add <code>lsenjov/prezto</code> as <code>packages/zsh/dot-zprezto</code> at revision <code>6c4fdc9</code>, with recursive submodules.</li>
           <li>Keep the removed Powerlevel9k checkout out of the migration; Powerlevel10k is the configured prompt dependency.</li>
-          <li>Represent five standard runcoms as relative links into the pinned fork.</li>
-          <li>Make <code>dot-zshrc</code> a first-party wrapper that adds <code>~/.local/bin</code> portably, when present, and then sources the fork’s <code>runcoms/zshrc</code>. This preserves revision <code>6c4fdc9</code>.</li>
+          <li>Represent all six standard runcoms as relative links into the pinned fork.</li>
           <li>Store <code>.p10k.zsh</code> directly in the Zsh package.</li>
           <li>Document that Prezto updates happen by advancing the submodule revision, testing it, and committing the pointer.</li>
         </ol>
@@ -1078,7 +1077,7 @@ cd ~/code/lsenjov/dotfiles
           <article class="phase">
             <span class="phase-number">COMMIT 02</span>
             <h3>Prezto and Zsh</h3>
-            <p>Pin the personal fork, migrate runcom links and Powerlevel10k configuration, reconcile ForgeCode’s path addition, and verify shell startup.</p>
+            <p>Pin the personal fork, migrate all six runcom links and the Powerlevel10k configuration, and verify shell startup.</p>
           </article>
           <article class="phase">
             <span class="phase-number">COMMIT 03</span>
