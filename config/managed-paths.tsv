@@ -7,3 +7,8 @@ zsh	dot-zlogin	.zlogin
 zsh	dot-zlogout	.zlogout
 zsh	dot-zpreztorc	.zpreztorc
 zsh	dot-p10k.zsh	.p10k.zsh
+codex	dot-codex/AGENTS.md	.codex/AGENTS.md
+agents	dot-agents/skills/grill-me	.agents/skills/grill-me
+agents	dot-agents/skills/explain-code-changes	.agents/skills/explain-code-changes
+agents	dot-agents/skills/code-review-skill	.agents/skills/code-review-skill
+agents	dot-agents/skills/frontend-design	.agents/skills/frontend-design

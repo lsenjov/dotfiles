@@ -1,0 +1,4 @@
+interface:
+  display_name: "Explain Code Changes"
+  short_description: "Walk through code changes one cohesive behavior at a time"
+  default_prompt: "Use $explain-code-changes to walk me through this branch one cohesive behavior at a time."

@@ -1007,7 +1007,7 @@
           <li>credentials or private keys</li>
         </ul>
 
-        <p>Before flattening, create both <code>git bundle</code> archives and metadata-preserving working-tree archives for <code>explain-code-changes</code> and <code>code-review-skill</code>. The latter archive must include the modified <code>SKILL.md</code> and untracked <code>reference/cross-cutting/duplication.md</code> that a bundle cannot capture. Generate file and SHA-256 manifests, import the working trees without <code>.git</code>, and compare the imported manifests before removing any original metadata. After the new links are verified, separately bundle the parent <code>~/.codex</code> repository—which covers <code>grill-me</code>—and then remove its <code>.git</code> directory.</p>
+        <p>Before flattening, create both <code>git bundle</code> archives and metadata-preserving working-tree archives for <code>explain-code-changes</code> and <code>code-review-skill</code>. Pin the clean <code>code-review-skill</code> source at revision <code>6c8b7fd64ce694769e49aacaaf08b6b0b442226b</code>, which includes the duplication guidance. Generate file and SHA-256 manifests, import only the runtime skill content without <code>.git</code>, and compare the selected-source and imported manifests before removing any original metadata. After the new links are verified, separately bundle the parent <code>~/.codex</code> repository—which covers <code>grill-me</code>—and then remove its <code>.git</code> directory.</p>
       </section>
 
       <section id="bootstrap">
