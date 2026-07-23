@@ -1,0 +1,1127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Implementation plan for a Stow-managed dotfiles repository containing Prezto, Codex guidance, and personal agent skills.">
+  <title>Dotfiles Repository — Implementation Plan</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f1eee5;
+      --paper-deep: #e5dfd1;
+      --ink: #18211c;
+      --muted: #5c665f;
+      --line: #b9b8aa;
+      --green: #0e5848;
+      --green-bright: #c6ff5b;
+      --red: #8d2b1f;
+      --blue: #264f9e;
+      --white: #fffef8;
+      --shadow: 8px 8px 0 rgba(24, 33, 28, 0.14);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      color: var(--ink);
+      background:
+        linear-gradient(rgba(24, 33, 28, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(24, 33, 28, 0.035) 1px, transparent 1px),
+        var(--paper);
+      background-size: 24px 24px;
+      font-family: "Avenir Next", Avenir, "Century Gothic", Futura, sans-serif;
+      line-height: 1.65;
+    }
+
+    a {
+      color: var(--blue);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 0.18em;
+    }
+
+    a:hover {
+      color: var(--red);
+    }
+
+    .skip-link {
+      position: fixed;
+      z-index: 10;
+      top: 0.75rem;
+      left: 0.75rem;
+      padding: 0.65rem 0.9rem;
+      border: 2px solid var(--ink);
+      background: var(--green-bright);
+      color: var(--ink);
+      font-weight: 800;
+      transform: translateY(-200%);
+    }
+
+    .skip-link:focus {
+      transform: translateY(0);
+    }
+
+    code,
+    pre,
+    .eyebrow,
+    .status-label,
+    .nav-index,
+    .phase-number,
+    .fact-key {
+      font-family: "IBM Plex Mono", "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+    }
+
+    code {
+      padding: 0.12rem 0.32rem;
+      border: 1px solid rgba(24, 33, 28, 0.14);
+      background: rgba(255, 254, 248, 0.7);
+      font-size: 0.88em;
+    }
+
+    pre {
+      margin: 1.25rem 0;
+      padding: 1.25rem;
+      overflow-x: auto;
+      border: 1px solid var(--ink);
+      background: var(--ink);
+      color: #eff5e8;
+      box-shadow: var(--shadow);
+      font-size: 0.83rem;
+      line-height: 1.55;
+    }
+
+    pre code {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font-size: inherit;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin-top: 0;
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+      font-weight: 700;
+      line-height: 1.02;
+      text-wrap: balance;
+    }
+
+    h1 {
+      max-width: 980px;
+      margin-bottom: 1.3rem;
+      font-size: clamp(3.4rem, 9vw, 8rem);
+      letter-spacing: -0.055em;
+    }
+
+    h2 {
+      margin-bottom: 1.4rem;
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      letter-spacing: -0.035em;
+    }
+
+    h3 {
+      margin-bottom: 0.65rem;
+      font-size: 1.4rem;
+      letter-spacing: -0.018em;
+    }
+
+    p {
+      margin: 0 0 1rem;
+    }
+
+    ul,
+    ol {
+      margin: 0.7rem 0 1rem;
+      padding-left: 1.3rem;
+    }
+
+    li + li {
+      margin-top: 0.45rem;
+    }
+
+    .hero {
+      position: relative;
+      min-height: 88vh;
+      padding: clamp(1.25rem, 4vw, 4rem);
+      overflow: hidden;
+      border-bottom: 1px solid var(--ink);
+      background:
+        radial-gradient(circle at 82% 18%, rgba(198, 255, 91, 0.9) 0 7%, transparent 7.2%),
+        linear-gradient(125deg, transparent 0 63%, rgba(14, 88, 72, 0.12) 63% 100%),
+        var(--paper);
+    }
+
+    .hero::after {
+      position: absolute;
+      right: -7rem;
+      bottom: -12rem;
+      width: 34rem;
+      height: 34rem;
+      border: 5rem solid var(--green);
+      border-radius: 50%;
+      content: "";
+      opacity: 0.96;
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: clamp(4rem, 12vh, 8rem);
+      font-size: 0.73rem;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      width: 2.5rem;
+      height: 0.65rem;
+      background: var(--red);
+      content: "";
+    }
+
+    .hero-copy {
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-summary {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(230px, 1fr);
+      gap: clamp(1.5rem, 5vw, 5rem);
+      align-items: end;
+      max-width: 1150px;
+    }
+
+    .hero-summary > p {
+      max-width: 720px;
+      margin: 0;
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+      font-size: clamp(1.35rem, 2.7vw, 2.1rem);
+      line-height: 1.25;
+    }
+
+    .status-card {
+      padding: 1.1rem 1.25rem;
+      border: 1px solid var(--ink);
+      background: var(--green-bright);
+      box-shadow: var(--shadow);
+      transform: rotate(-1.2deg);
+    }
+
+    .status-label {
+      display: block;
+      margin-bottom: 0.35rem;
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .status-card strong {
+      display: block;
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+      font-size: 1.5rem;
+      line-height: 1.1;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: minmax(220px, 310px) minmax(0, 1fr);
+      max-width: 1440px;
+      margin: 0 auto;
+    }
+
+    .rail {
+      position: sticky;
+      top: 0;
+      align-self: start;
+      height: 100vh;
+      padding: 2.2rem 1.5rem;
+      border-right: 1px solid var(--ink);
+      background: rgba(229, 223, 209, 0.92);
+      backdrop-filter: blur(8px);
+    }
+
+    .rail-title {
+      display: block;
+      margin-bottom: 2rem;
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+      font-size: 1.3rem;
+      font-weight: 700;
+    }
+
+    .rail nav {
+      display: grid;
+      gap: 0.35rem;
+    }
+
+    .rail nav a {
+      display: grid;
+      grid-template-columns: 2.4rem 1fr;
+      gap: 0.5rem;
+      padding: 0.55rem 0;
+      color: var(--ink);
+      text-decoration: none;
+    }
+
+    .rail nav a:hover {
+      color: var(--red);
+      transform: translateX(0.25rem);
+    }
+
+    .nav-index {
+      color: var(--red);
+      font-size: 0.75rem;
+      font-weight: 800;
+    }
+
+    .rail-note {
+      position: absolute;
+      right: 1.5rem;
+      bottom: 1.8rem;
+      left: 1.5rem;
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    main {
+      min-width: 0;
+    }
+
+    section {
+      padding: clamp(3.5rem, 8vw, 7.5rem) clamp(1.25rem, 6vw, 6.5rem);
+      border-bottom: 1px solid var(--ink);
+      scroll-margin-top: 1rem;
+    }
+
+    section:nth-child(even) {
+      background: rgba(255, 254, 248, 0.58);
+    }
+
+    .section-kicker {
+      display: block;
+      margin-bottom: 0.8rem;
+      color: var(--red);
+      font-family: "IBM Plex Mono", "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .lede {
+      max-width: 820px;
+      margin-bottom: 2rem;
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+      font-size: clamp(1.3rem, 2.2vw, 1.75rem);
+      line-height: 1.35;
+    }
+
+    .decision-grid,
+    .card-grid,
+    .phase-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+
+    .decision,
+    .card,
+    .phase {
+      padding: 1.35rem;
+      border: 1px solid var(--ink);
+      background: var(--white);
+    }
+
+    .decision:first-child {
+      grid-row: span 2;
+      background: var(--green);
+      color: var(--white);
+      box-shadow: var(--shadow);
+    }
+
+    .decision:first-child code {
+      border-color: rgba(255, 255, 255, 0.25);
+      background: rgba(255, 255, 255, 0.1);
+      color: inherit;
+    }
+
+    .decision h3,
+    .card h3,
+    .phase h3 {
+      font-family: "Avenir Next", Avenir, "Century Gothic", Futura, sans-serif;
+      font-size: 1.03rem;
+      line-height: 1.3;
+    }
+
+    .decision p,
+    .card p,
+    .phase p {
+      margin-bottom: 0;
+      font-size: 0.94rem;
+    }
+
+    .audit {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin: 2rem 0;
+      border-top: 1px solid var(--ink);
+      border-left: 1px solid var(--ink);
+    }
+
+    .fact {
+      min-height: 150px;
+      padding: 1rem;
+      border-right: 1px solid var(--ink);
+      border-bottom: 1px solid var(--ink);
+      background: var(--white);
+    }
+
+    .fact-key {
+      display: block;
+      margin-bottom: 1rem;
+      color: var(--muted);
+      font-size: 0.69rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .fact strong {
+      display: block;
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+      font-size: 1.35rem;
+      line-height: 1.15;
+    }
+
+    .warning {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 1rem;
+      align-items: start;
+      margin: 1.5rem 0;
+      padding: 1.2rem;
+      border: 2px solid var(--red);
+      background: #fff0e9;
+      box-shadow: 5px 5px 0 rgba(196, 69, 47, 0.18);
+    }
+
+    .warning-mark {
+      display: grid;
+      width: 2rem;
+      height: 2rem;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--red);
+      color: var(--white);
+      font-weight: 900;
+    }
+
+    .warning p:last-child {
+      margin-bottom: 0;
+    }
+
+    .verified {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 1rem;
+      align-items: start;
+      margin: 1.5rem 0;
+      padding: 1.2rem;
+      border: 2px solid var(--green);
+      background: #e8f4df;
+      box-shadow: 5px 5px 0 rgba(14, 88, 72, 0.16);
+    }
+
+    .verified .warning-mark {
+      background: var(--green);
+    }
+
+    .verified p:last-child {
+      margin-bottom: 0;
+    }
+
+    .path-map {
+      width: 100%;
+      margin: 2rem 0;
+      border-collapse: collapse;
+      background: var(--white);
+      font-size: 0.92rem;
+    }
+
+    .path-map caption {
+      padding: 0 0 0.7rem;
+      font-family: "IBM Plex Mono", "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-align: left;
+      text-transform: uppercase;
+    }
+
+    .path-map th,
+    .path-map td {
+      padding: 0.9rem 1rem;
+      border: 1px solid var(--ink);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .path-map th {
+      background: var(--ink);
+      color: var(--white);
+      font-family: "IBM Plex Mono", "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .do-not-track {
+      columns: 2;
+      column-gap: 2.5rem;
+      margin-top: 1.25rem;
+      padding: 1.2rem 1.2rem 1.2rem 2.5rem;
+      border-left: 0.7rem solid var(--red);
+      background: var(--white);
+    }
+
+    .do-not-track li {
+      break-inside: avoid;
+    }
+
+    .phase {
+      position: relative;
+      padding-top: 3.5rem;
+    }
+
+    .phase-number {
+      position: absolute;
+      top: 1rem;
+      left: 1.35rem;
+      color: var(--red);
+      font-size: 0.72rem;
+      font-weight: 900;
+      letter-spacing: 0.1em;
+    }
+
+    .phase:nth-child(1) {
+      background: var(--green-bright);
+    }
+
+    .phase:nth-child(4) {
+      background: var(--ink);
+      color: var(--white);
+    }
+
+    .phase:nth-child(4) .phase-number {
+      color: var(--green-bright);
+    }
+
+    .checklist {
+      display: grid;
+      gap: 0.65rem;
+      margin: 1.5rem 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .checklist li {
+      display: grid;
+      grid-template-columns: 1.35rem 1fr;
+      gap: 0.75rem;
+      align-items: start;
+      margin: 0;
+    }
+
+    .checklist li::before {
+      display: grid;
+      width: 1.2rem;
+      height: 1.2rem;
+      margin-top: 0.2rem;
+      place-items: center;
+      border: 1px solid var(--ink);
+      background: var(--white);
+      content: "✓";
+      color: var(--green);
+      font-family: "IBM Plex Mono", "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+      font-size: 0.75rem;
+      font-weight: 900;
+    }
+
+    .sources {
+      display: grid;
+      gap: 0.75rem;
+      padding: 0;
+      list-style: none;
+    }
+
+    .sources li {
+      margin: 0;
+      padding: 0.8rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1.5rem clamp(1.25rem, 4vw, 4rem);
+      background: var(--ink);
+      color: var(--white);
+      font-size: 0.78rem;
+    }
+
+    @media (max-width: 980px) {
+      .shell {
+        display: block;
+      }
+
+      .rail {
+        position: relative;
+        z-index: 2;
+        height: auto;
+        padding: 1rem;
+        border-right: 0;
+        border-bottom: 1px solid var(--ink);
+      }
+
+      .rail-title,
+      .rail-note {
+        display: none;
+      }
+
+      .rail nav {
+        display: flex;
+        gap: 0.25rem 1rem;
+        overflow-x: auto;
+      }
+
+      .rail nav a {
+        flex: 0 0 auto;
+        grid-template-columns: auto auto;
+      }
+
+      .audit {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .hero {
+        min-height: auto;
+        padding-bottom: 7rem;
+      }
+
+      .hero::after {
+        right: -10rem;
+        bottom: -16rem;
+        transform: scale(0.72);
+      }
+
+      .eyebrow {
+        margin-bottom: 3.5rem;
+      }
+
+      .hero-summary,
+      .decision-grid,
+      .card-grid,
+      .phase-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .decision:first-child {
+        grid-row: auto;
+      }
+
+      .audit {
+        grid-template-columns: 1fr;
+      }
+
+      .fact {
+        min-height: 0;
+      }
+
+      .do-not-track {
+        columns: 1;
+      }
+
+      .path-map {
+        display: block;
+        overflow-x: auto;
+      }
+
+      footer {
+        display: block;
+      }
+    }
+
+    @media (max-width: 390px) {
+      h1 {
+        font-size: 2.75rem;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+
+      *,
+      *::before,
+      *::after {
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    @media print {
+      body {
+        background: white;
+        font-size: 10pt;
+      }
+
+      .hero {
+        min-height: auto;
+        padding: 1.5cm;
+      }
+
+      .hero::after,
+      .rail {
+        display: none;
+      }
+
+      .shell {
+        display: block;
+      }
+
+      section {
+        padding: 1.2cm 1.5cm;
+        break-inside: auto;
+      }
+
+      .status-card,
+      pre,
+      .decision:first-child,
+      .phase:nth-child(4) {
+        box-shadow: none;
+      }
+
+      pre,
+      .path-map th,
+      .decision:first-child,
+      .phase:nth-child(4) {
+        border-color: black;
+        background: white;
+        color: black;
+      }
+
+      .phase:nth-child(4) .phase-number,
+      .section-kicker,
+      .nav-index {
+        color: black;
+      }
+
+      .card,
+      .decision,
+      .phase,
+      .warning,
+      .verified,
+      pre,
+      table {
+        break-inside: avoid;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .sources a[href^="http"]::after {
+        content: " (" attr(href) ")";
+        font-family: "IBM Plex Mono", "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+        font-size: 0.8em;
+        overflow-wrap: anywhere;
+      }
+
+      footer {
+        border-top: 1px solid black;
+        background: white;
+        color: black;
+      }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to plan content</a>
+  <header class="hero">
+    <div class="hero-copy">
+      <div class="eyebrow">Execution blueprint · 23 July 2026</div>
+      <h1>Dotfiles,<br>deliberately.</h1>
+      <div class="hero-summary">
+        <p>A safe, inspectable plan for turning this repository into the source of truth for Prezto, global Codex guidance, and reusable personal skills.</p>
+        <div class="status-card" role="group" aria-labelledby="prezto-status-label">
+          <span class="status-label" id="prezto-status-label">Prezto status</span>
+          <strong>Verified clean</strong>
+          <span>Fork and recursive submodules are synchronized.</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="shell">
+    <aside class="rail">
+      <span class="rail-title">Field index</span>
+      <nav aria-label="Plan sections">
+        <a href="#decision"><span class="nav-index">01</span><span>Decision</span></a>
+        <a href="#baseline"><span class="nav-index">02</span><span>Baseline</span></a>
+        <a href="#architecture"><span class="nav-index">03</span><span>Architecture</span></a>
+        <a href="#prezto"><span class="nav-index">04</span><span>Prezto</span></a>
+        <a href="#codex"><span class="nav-index">05</span><span>Codex</span></a>
+        <a href="#bootstrap"><span class="nav-index">06</span><span>Bootstrap</span></a>
+        <a href="#verification"><span class="nav-index">07</span><span>Verification</span></a>
+        <a href="#delivery"><span class="nav-index">08</span><span>Delivery</span></a>
+      </nav>
+      <p class="rail-note">A proposal only. Execution begins after approval.</p>
+    </aside>
+
+    <main id="main-content">
+      <section id="decision">
+        <span class="section-kicker">01 · Executive decision</span>
+        <h2>Use Stow as the deployment layer.</h2>
+        <p class="lede">Keep authored files readable in Git, package them by concern, and make installation reversible. Retain the cleaned personal Prezto fork as a pinned dependency; flatten personal skills into this repository.</p>
+
+        <div class="decision-grid">
+          <article class="decision">
+            <h3>Recommended: GNU Stow monorepo</h3>
+            <p>Stow mirrors the shape of <code>$HOME</code>, operates in explicit packages, supports visible <code>dot-*</code> source names, and detects conflicts before it changes the target tree. It is a small conceptual layer over ordinary files and symlinks.</p>
+          </article>
+          <article class="decision">
+            <h3>Not a bare home-directory repository</h3>
+            <p>A bare repository has fewer dependencies, but it makes broad home-directory operations easier and gives weak structural protection against accidentally tracking Codex runtime state.</p>
+          </article>
+          <article class="decision">
+            <h3>Chezmoi remains the escalation path</h3>
+            <p>Move to chezmoi only when host templates, several operating systems, encrypted files, or password-manager integrations become central requirements.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="baseline">
+        <span class="section-kicker">02 · Verified baseline</span>
+        <h2>Prezto is clean and synchronized.</h2>
+        <p class="lede">The audit below was run after fetching and pruning the fork’s remote on 23 July 2026.</p>
+
+        <h3 id="prezto-audit-title">Audit snapshot</h3>
+        <div class="audit" role="group" aria-labelledby="prezto-audit-title">
+          <div class="fact">
+            <span class="fact-key">Branch</span>
+            <strong><code>master</code></strong>
+          </div>
+          <div class="fact">
+            <span class="fact-key">Revision</span>
+            <strong><code>6c4fdc9</code></strong>
+          </div>
+          <div class="fact">
+            <span class="fact-key">Remote delta</span>
+            <strong>+0 / −0</strong>
+          </div>
+          <div class="fact">
+            <span class="fact-key">Submodules</span>
+            <strong>Initialized</strong>
+          </div>
+        </div>
+
+        <div class="verified" role="note">
+          <span class="warning-mark" aria-hidden="true">✓</span>
+          <div>
+            <h3>Cleanup confirmed</h3>
+            <p>The unused <code>modules/prompt/external/powerlevel9k/</code> checkout has been removed. <code>git status</code> reports no tracked or untracked changes.</p>
+          </div>
+        </div>
+
+        <div class="card-grid">
+          <article class="card">
+            <h3>Tracked Prezto state</h3>
+            <p>The fork at <code>git@github.com:lsenjov/prezto.git</code> is synchronized with <code>origin/master</code>. No tracked files are modified, and no recorded submodule has a dirty marker.</p>
+          </article>
+          <article class="card">
+            <h3>Runcom comparison</h3>
+            <p><code>.zshenv</code>, <code>.zprofile</code>, <code>.zlogin</code>, <code>.zlogout</code>, and <code>.zpreztorc</code> match the fork. <code>~/.zshrc</code> differs only by a ForgeCode-added <code>~/.local/bin</code> path export.</p>
+          </article>
+          <article class="card">
+            <h3>Prompt configuration</h3>
+            <p><code>~/.p10k.zsh</code> is a first-party 1,832-line configuration and must be captured explicitly in the Zsh package.</p>
+          </article>
+          <article class="card">
+            <h3>Local prerequisites</h3>
+            <p>Git 2.55.0 and Zsh 5.9.1 are present. GNU Stow 2.4.0 or newer and ShellCheck are not currently installed on the CachyOS host.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="architecture">
+        <span class="section-kicker">03 · Repository architecture</span>
+        <h2>Three packages, one dependency boundary.</h2>
+        <p class="lede">The repository owns personal configuration. Prezto remains a pinned fork because it has an independent update lifecycle; personal skills become ordinary files with no nested Git metadata.</p>
+
+        <pre aria-label="Proposed repository tree"><code>dotfiles/
+├── README.md
+├── AGENTS.md                       # Rules for maintaining this repo
+├── Makefile
+├── install
+├── plans/
+├── packages/
+│   ├── zsh/
+│   │   ├── dot-zprezto/            # lsenjov/prezto submodule
+│   │   ├── dot-zshenv              # Relative link to Prezto runcom
+│   │   ├── dot-zprofile            # Relative link to Prezto runcom
+│   │   ├── dot-zshrc               # First-party wrapper around runcom
+│   │   ├── dot-zlogin              # Relative link to Prezto runcom
+│   │   ├── dot-zlogout             # Relative link to Prezto runcom
+│   │   ├── dot-zpreztorc           # Relative link to Prezto runcom
+│   │   └── dot-p10k.zsh
+│   ├── codex/
+│   │   └── dot-codex/
+│   │       └── AGENTS.md
+│   └── agents/
+│       └── dot-agents/
+│           └── skills/
+│               ├── grill-me/
+│               ├── explain-code-changes/
+│               ├── code-review-skill/
+│               └── frontend-design/
+├── scripts/
+│   ├── doctor
+│   ├── link
+│   ├── unlink
+│   └── test
+├── .github/workflows/test.yml
+├── .gitignore
+├── .gitmodules
+└── .stowrc</code></pre>
+
+        <table class="path-map">
+          <caption>Source-to-target ownership map</caption>
+          <thead>
+            <tr>
+              <th scope="col">Repository source</th>
+              <th scope="col">Installed path</th>
+              <th scope="col">Ownership</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>packages/zsh/dot-zprezto</code></td>
+              <td><code>~/.zprezto</code></td>
+              <td>Pinned fork</td>
+            </tr>
+            <tr>
+              <td><code>packages/zsh/dot-p10k.zsh</code></td>
+              <td><code>~/.p10k.zsh</code></td>
+              <td>First-party</td>
+            </tr>
+            <tr>
+              <td><code>packages/codex/dot-codex/AGENTS.md</code></td>
+              <td><code>~/.codex/AGENTS.md</code></td>
+              <td>First-party</td>
+            </tr>
+            <tr>
+              <td><code>packages/agents/dot-agents/skills</code></td>
+              <td><code>~/.agents/skills</code></td>
+              <td>First-party and attributed imports</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="prezto">
+        <span class="section-kicker">04 · Prezto migration</span>
+        <h2>Preserve the fork; normalize the home layer.</h2>
+        <p class="lede">The cleanup has made the personal fork suitable for pinning directly. The migration should avoid copying its working tree into the main repository, stripping its Git metadata, or changing the pinned revision during deployment.</p>
+
+        <ol>
+          <li>Add <code>lsenjov/prezto</code> as <code>packages/zsh/dot-zprezto</code> at revision <code>6c4fdc9</code>, with recursive submodules.</li>
+          <li>Keep the removed Powerlevel9k checkout out of the migration; Powerlevel10k is the configured prompt dependency.</li>
+          <li>Represent five standard runcoms as relative links into the pinned fork.</li>
+          <li>Make <code>dot-zshrc</code> a first-party wrapper that adds <code>~/.local/bin</code> portably, when present, and then sources the fork’s <code>runcoms/zshrc</code>. This preserves revision <code>6c4fdc9</code>.</li>
+          <li>Store <code>.p10k.zsh</code> directly in the Zsh package.</li>
+          <li>Document that Prezto updates happen by advancing the submodule revision, testing it, and committing the pointer.</li>
+        </ol>
+
+        <div class="warning" role="note">
+          <span class="warning-mark" aria-hidden="true">↻</span>
+          <div>
+            <h3>Update discipline</h3>
+            <p>Do not use <code>zprezto-update</code> as the normal update path after installation. It can advance the submodule working tree without updating the dotfiles repository’s recorded revision.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="codex">
+        <span class="section-kicker">05 · Codex and skills</span>
+        <h2>Track authored behavior, never generated state.</h2>
+        <p class="lede">Global instructions and global skills live in different canonical locations. The deployment packages should reflect that boundary and keep runtime data out of Git.</p>
+
+        <div class="card-grid">
+          <article class="card">
+            <h3>Global guidance</h3>
+            <p>Deploy the personal instruction file to <code>~/.codex/AGENTS.md</code>. Keep a separate root <code>AGENTS.md</code> for rules that govern this repository.</p>
+          </article>
+          <article class="card">
+            <h3>Global skills</h3>
+            <p>Deploy personal skills to <code>~/.agents/skills</code>, the current canonical user scope. Do not copy bundled <code>~/.codex/skills/.system</code> content.</p>
+          </article>
+          <article class="card">
+            <h3>Flatten personal repositories</h3>
+            <p>Import <code>grill-me</code>, <code>explain-code-changes</code>, and <code>code-review-skill</code> as ordinary directories. Preserve the nested <code>explain-code-changes</code> repository and the externally symlinked <code>code-review-skill</code> repository before flattening; <code>grill-me</code> is covered by the parent <code>~/.codex</code> repository.</p>
+          </article>
+          <article class="card">
+            <h3>Attribute external material</h3>
+            <p>Restore and verify the missing <code>LICENSE.txt</code> for <code>frontend-design</code>. Record source URLs and imported revisions in <code>ORIGIN.md</code> when a skill is not wholly first-party.</p>
+          </article>
+        </div>
+
+        <h3>Explicit exclusion list</h3>
+        <ul class="do-not-track">
+          <li><code>auth.json</code></li>
+          <li>session transcripts</li>
+          <li>history files</li>
+          <li>logs and shell snapshots</li>
+          <li>SQLite databases and WAL files</li>
+          <li>model and HTTP caches</li>
+          <li>installation identifiers</li>
+          <li>plugin installation caches</li>
+          <li>bundled <code>.system</code> skills</li>
+          <li>credentials or private keys</li>
+        </ul>
+
+        <p>Before flattening, create both <code>git bundle</code> archives and metadata-preserving working-tree archives for <code>explain-code-changes</code> and <code>code-review-skill</code>. The latter archive must include the modified <code>SKILL.md</code> and untracked <code>reference/cross-cutting/duplication.md</code> that a bundle cannot capture. Generate file and SHA-256 manifests, import the working trees without <code>.git</code>, and compare the imported manifests before removing any original metadata. After the new links are verified, separately bundle the parent <code>~/.codex</code> repository—which covers <code>grill-me</code>—and then remove its <code>.git</code> directory.</p>
+      </section>
+
+      <section id="bootstrap">
+        <span class="section-kicker">06 · Bootstrap contract</span>
+        <h2>Preview first. Apply second. Undo cleanly.</h2>
+        <p class="lede">The bootstrap must be idempotent and conservative. It should never use broad deletion, silently elevate privileges, or let Stow fold the complete Codex runtime directory into the repository.</p>
+
+        <pre aria-label="Proposed installation commands"><code>git clone --recurse-submodules &lt;repo-url&gt; ~/code/lsenjov/dotfiles
+cd ~/code/lsenjov/dotfiles
+./install --check
+./install --apply</code></pre>
+
+        <ol>
+          <li>Check Git, Zsh, GNU Stow 2.4.0 or newer, and development-only verification tools. Older Stow releases cannot safely translate the <code>dot-codex</code>, <code>dot-agents</code>, and <code>dot-zprezto</code> directories.</li>
+          <li>Print the CachyOS package command for missing dependencies without running <code>sudo</code>.</li>
+          <li>Initialize and verify recursive submodules.</li>
+          <li>Create real <code>~/.codex</code> and <code>~/.agents/skills</code> target containers before invoking Stow.</li>
+          <li>Use Stow’s simulation mode to report all conflicts before any backup or target mutation.</li>
+          <li>Create a timestamped backup with metadata-preserving copies and a manifest that records every original path, file type, mode, symlink destination, and backup path.</li>
+          <li>Move only the manifested conflicts aside, Stow the selected packages, and verify every installed link inside a transactional shell trap.</li>
+          <li>If Stow or verification fails, automatically remove links created by that run and restore every manifested original before returning an error.</li>
+          <li>Provide an explicit restore command that reads the manifest and refuses to overwrite newer unmanifested state.</li>
+          <li>Print the optional <code>chsh</code> command rather than changing the login shell automatically.</li>
+        </ol>
+
+        <div class="warning" role="note">
+          <span class="warning-mark" aria-hidden="true">×</span>
+          <div>
+            <h3>Never use <code>stow --adopt</code> in bootstrap</h3>
+            <p><code>--adopt</code> modifies repository contents. Migration should use explicit, timestamped backups so a conflict cannot silently overwrite the intended source of truth.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="verification">
+        <span class="section-kicker">07 · Verification gates</span>
+        <h2>Test the home directory without risking the home directory.</h2>
+        <p class="lede">Local tests and CI should install into a temporary home, exercise the same commands twice, and fail on secrets, invalid skills, shell errors, or broken dependency pins.</p>
+
+        <ul class="checklist">
+          <li>Stow simulation and installation into a temporary <code>$HOME</code>.</li>
+          <li>A second installation produces no changes or errors.</li>
+          <li>Unstowing removes managed links without touching unrelated files.</li>
+          <li><code>zsh -n</code> succeeds for all managed Zsh files.</li>
+          <li>A minimal interactive Zsh startup exits successfully without stderr.</li>
+          <li>Every recorded Prezto submodule is initialized at its pinned revision.</li>
+          <li>CI runs GNU Stow 2.4.0 or newer and exercises <code>--dotfiles</code> translation for directory names.</li>
+          <li>Each skill has one <code>SKILL.md</code> with <code>name</code> and <code>description</code>.</li>
+          <li>Skill references, scripts, assets, and required license files exist.</li>
+          <li>No managed symlink is broken.</li>
+          <li>ShellCheck validates bootstrap scripts.</li>
+          <li>A secret scanner examines tracked content and commit diffs.</li>
+        </ul>
+      </section>
+
+      <section id="delivery">
+        <span class="section-kicker">08 · Delivery sequence</span>
+        <h2>Four reviewable commits.</h2>
+        <p class="lede">Implementation follows the repository rule that complex work is planned first and that each completed plan step is committed separately.</p>
+
+        <div class="phase-grid">
+          <article class="phase">
+            <span class="phase-number">COMMIT 01</span>
+            <h3>Scaffold and safety harness</h3>
+            <p>Add the repository structure, Stow configuration, conservative installer, temporary-home harness, and baseline documentation.</p>
+          </article>
+          <article class="phase">
+            <span class="phase-number">COMMIT 02</span>
+            <h3>Prezto and Zsh</h3>
+            <p>Pin the personal fork, migrate runcom links and Powerlevel10k configuration, reconcile ForgeCode’s path addition, and verify shell startup.</p>
+          </article>
+          <article class="phase">
+            <span class="phase-number">COMMIT 03</span>
+            <h3>Codex and personal skills</h3>
+            <p>Create bundles and hash-verified working-tree archives, import personal skills, deploy global guidance, restore third-party attribution, and enforce the runtime exclusion boundary.</p>
+          </article>
+          <article class="phase">
+            <span class="phase-number">COMMIT 04</span>
+            <h3>CI, recovery, and handoff</h3>
+            <p>Add automated validation, document install/update/uninstall workflows, bundle the parent <code>~/.codex</code> repository, and remove obsolete Git metadata after verification.</p>
+          </article>
+        </div>
+
+        <div class="warning" role="note">
+          <span class="warning-mark" aria-hidden="true">◎</span>
+          <div>
+            <h3>Review gate before every commit</h3>
+            <p>After each implementation phase, spawn a new review agent. Fix every high- and medium-severity finding, repeat review until neither severity remains, report all low-severity findings before continuing, rerun the phase’s verification, and only then create its commit.</p>
+          </div>
+        </div>
+
+        <h3 style="margin-top: 3rem;">Definition of done</h3>
+        <p>The repository can configure a clean temporary home twice without error; a fresh CachyOS machine can follow the documented install path; Prezto and its modules are pinned; Codex loads the intended global instructions and skills; no generated state or credential is tracked; and the former setup remains recoverable from timestamped backups, Git bundles, metadata-preserving working-tree archives, and verified SHA-256 manifests.</p>
+      </section>
+
+      <section id="sources">
+        <span class="section-kicker">Research basis</span>
+        <h2>Primary references.</h2>
+        <ul class="sources">
+          <li><a href="https://github.com/webpro/awesome-dotfiles">Awesome Dotfiles</a> — curated approaches, managers, and maintained examples.</li>
+          <li><a href="https://www.gnu.org/software/stow/manual/stow.html">GNU Stow manual</a> — packages, targets, dotfile translation, conflict behavior, and adoption risks.</li>
+          <li><a href="https://lists.gnu.org/archive/html/info-gnu/2024-04/msg00000.html">GNU Stow 2.4.0 release notes</a> — the release that fixed <code>--dotfiles</code> handling for directories.</li>
+          <li><a href="https://github.com/sorin-ionescu/prezto#installation">Prezto documentation</a> — recursive installation, runcom linking, modules, customization, and updates.</li>
+          <li><a href="https://developers.openai.com/codex/concepts/customization/">OpenAI Codex customization</a> — global and repository guidance, skill locations, and progressive disclosure.</li>
+          <li><a href="https://www.chezmoi.io/">Chezmoi documentation</a> — the alternative path for templating, secrets, and diverse machines.</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+
+  <footer>
+    <span>Dotfiles repository implementation plan</span>
+    <span>Prepared 23 July 2026 · Australia/Brisbane</span>
+  </footer>
+</body>
+</html>
