@@ -88,7 +88,7 @@ if [[ -f "$created_containers_file" ]]; then
   for container in "${created_containers[@]}"; do
     [[ -n "$container" ]] || continue
     case "$container" in
-      .codex|.agents|.agents/skills) ;;
+      .config|.codex|.agents|.agents/skills) ;;
       *) die "invalid created container in backup: $container" ;;
     esac
   done

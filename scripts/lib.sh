@@ -248,6 +248,9 @@ ensure_target_containers() {
   local target_root=$1
   shift
 
+  if package_is_selected nvim "$@"; then
+    ensure_real_directory "$target_root/.config"
+  fi
   if package_is_selected codex "$@"; then
     ensure_real_directory "$target_root/.codex"
   fi

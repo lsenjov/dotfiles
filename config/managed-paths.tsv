@@ -12,3 +12,4 @@ agents	dot-agents/skills/grill-me	.agents/skills/grill-me
 agents	dot-agents/skills/explain-code-changes	.agents/skills/explain-code-changes
 agents	dot-agents/skills/code-review-skill	.agents/skills/code-review-skill
 agents	dot-agents/skills/frontend-design	.agents/skills/frontend-design
+nvim	dot-config/nvim	.config/nvim

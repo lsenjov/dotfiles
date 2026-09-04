@@ -1,9 +1,9 @@
 # Dotfiles
 
-Personal Zsh, Prezto, Codex, and agent-skill configuration managed with GNU
-Stow. The repository is an explicit allowlist: authored configuration belongs
-here; credentials, sessions, histories, caches, logs, databases, and machine
-identifiers do not.
+Personal Zsh, Prezto, Neovim, Codex, and agent-skill configuration managed with
+GNU Stow. The repository is an explicit allowlist: authored configuration
+belongs here; credentials, sessions, histories, caches, logs, databases, and
+machine identifiers do not.
 
 The implementation follows the reviewed
 [repository plan](plans/dotfiles-repository-plan.html).
@@ -13,13 +13,14 @@ The implementation follows the reviewed
 | Package | Home paths |
 | --- | --- |
 | `zsh` | `~/.zprezto`, six Zsh runcoms, and `~/.p10k.zsh` |
+| `nvim` | `~/.config/nvim` |
 | `codex` | `~/.codex/AGENTS.md` |
 | `agents` | `~/.agents/skills/{grill-me,explain-code-changes,code-review-skill,frontend-design}` |
 
-`~/.codex` and `~/.agents/skills` remain real directories. Only the paths in
-[`config/managed-paths.tsv`](config/managed-paths.tsv) may be linked, so Codex
-runtime state and bundled `.system` skills cannot be folded into this
-repository by Stow.
+`~/.config`, `~/.codex`, and `~/.agents/skills` remain real directories. Only
+the paths in [`config/managed-paths.tsv`](config/managed-paths.tsv) may be
+linked, so unrelated application configuration, Codex runtime state, and
+bundled `.system` skills cannot be folded into this repository by Stow.
 
 ## Fresh CachyOS bootstrap
 

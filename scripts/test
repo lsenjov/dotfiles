@@ -41,6 +41,12 @@ if find "$repo_root/packages/agents" "$repo_root/packages/codex" \
   exit 1
 fi
 
+if find "$repo_root/packages/nvim" \( -name .git -o -name '*.spl' \) \
+  -print -quit | grep -q .; then
+  printf 'error: managed Neovim content contains repository or generated metadata\n' >&2
+  exit 1
+fi
+
 if find "$repo_root/packages/agents" "$repo_root/packages/codex" -type f \
   \( -name auth.json -o -name '*.sqlite' -o -name '*.sqlite3' \
   -o -name '*.sqlite-wal' -o -name '*.db' \) \
@@ -81,6 +87,7 @@ mkdir -p \
   "$fixture_packages/zsh/dot-demo-dir" \
   "$fixture_packages/codex/dot-codex" \
   "$fixture_packages/agents/dot-agents/skills/demo" \
+  "$fixture_packages/nvim/dot-config/nvim" \
   "$test_home"
 
 printf 'managed zsh\n' >"$fixture_packages/zsh/dot-zshrc"
@@ -89,12 +96,14 @@ printf 'managed directory\n' >"$fixture_packages/zsh/dot-demo-dir/value"
 printf 'managed agents\n' >"$fixture_packages/codex/dot-codex/AGENTS.md"
 printf '%s\n' '---' 'name: demo' 'description: Fixture skill.' '---' \
   >"$fixture_packages/agents/dot-agents/skills/demo/SKILL.md"
+printf 'managed nvim\n' >"$fixture_packages/nvim/dot-config/nvim/init.vim"
 printf '%s\n' \
   $'zsh\tdot-zshrc\t.zshrc' \
   $'zsh\ttarget\ttarget' \
   $'zsh\tdot-demo-dir\t.demo-dir' \
   $'codex\tdot-codex/AGENTS.md\t.codex/AGENTS.md' \
   $'agents\tdot-agents/skills/demo\t.agents/skills/demo' \
+  $'nvim\tdot-config/nvim\t.config/nvim' \
   >"$fixture_manifest"
 printf 'original zsh\n' >"$test_home/.zshrc"
 printf 'original target\n' >"$test_home/target"
@@ -141,6 +150,8 @@ backup_root=$(sed -n 's/^BACKUP_DIR=//p' <<<"$apply_output")
 [[ -L "$test_home/.demo-dir" ]]
 [[ -d "$test_home/.codex" && ! -L "$test_home/.codex" ]]
 [[ -d "$test_home/.agents/skills" && ! -L "$test_home/.agents/skills" ]]
+[[ -d "$test_home/.config" && ! -L "$test_home/.config" ]]
+[[ -L "$test_home/.config/nvim" ]]
 grep -qx 'unrelated' "$test_home/unrelated"
 
 backup_count_before=$(find "$fixture_state/backups" -mindepth 1 -maxdepth 1 -type d |
@@ -244,6 +255,7 @@ grep -qx 'original directory' "$test_home/.demo-dir/value"
 grep -qx 'unrelated' "$test_home/unrelated"
 [[ ! -e "$test_home/.codex" && ! -L "$test_home/.codex" ]]
 [[ ! -e "$test_home/.agents" && ! -L "$test_home/.agents" ]]
+[[ ! -e "$test_home/.config" && ! -L "$test_home/.config" ]]
 
 real_stow=$(command -v stow)
 fake_bin=$test_root/fake-bin
