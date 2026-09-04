@@ -28,8 +28,8 @@ Install runtime and verification dependencies:
 
 ```sh
 sudo pacman -S --needed \
-  actionlint diffutils fzf git gitleaks libxml2 perl python python-yaml \
-  shellcheck stow util-linux zsh
+  actionlint diffutils fzf gcc git gitleaks libxml2 neovim perl python python-yaml \
+  shellcheck stow tree-sitter-cli util-linux zsh
 ```
 
 GNU Stow 2.4.0 or newer is required. Earlier releases mishandle directory

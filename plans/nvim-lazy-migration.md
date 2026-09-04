@@ -17,3 +17,12 @@
    Neovim health and startup checks against the isolated installation.
 3. Run `scripts/test` and obtain an independent review with no high- or
    medium-severity findings before committing the implementation phase.
+
+## Treesitter restore repair
+
+1. Document and install the Tree-sitter CLI required by the current
+   nvim-treesitter branch.
+2. Complete the live plugin restore, then update installed parsers from a
+   fresh Neovim process so the update uses the restored Treesitter code.
+3. Repeat syntax, startup, repository, and independent review checks before
+   committing the repair.
