@@ -218,6 +218,7 @@ return {
       },
       formatters_by_ft = {
         clojure = { "zprint" },
+        rust = { "rustfmt" },
       },
     },
     config = function(_, opts)
