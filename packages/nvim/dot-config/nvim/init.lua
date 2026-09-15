@@ -68,4 +68,5 @@ map("n", "<c-M-p>", "<cmd>tabprevious<cr>")
 vim.cmd([[silent! aunmenu PopUp.How-to\ disable\ mouse]])
 vim.cmd([[silent! aunmenu PopUp.-1-]])
 
+require("codex_chat").setup()
 require("config.lazy")
