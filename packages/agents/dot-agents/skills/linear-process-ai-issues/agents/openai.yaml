@@ -1,0 +1,4 @@
+interface:
+  display_name: "Process Linear AI Issues"
+  short_description: "Process queued Linear AI issues"
+  default_prompt: "Use $linear-process-ai-issues to answer and implement queued Linear AI issues."

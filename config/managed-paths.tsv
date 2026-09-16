@@ -12,4 +12,5 @@ agents	dot-agents/skills/grill-me	.agents/skills/grill-me
 agents	dot-agents/skills/explain-code-changes	.agents/skills/explain-code-changes
 agents	dot-agents/skills/code-review-skill	.agents/skills/code-review-skill
 agents	dot-agents/skills/frontend-design	.agents/skills/frontend-design
+agents	dot-agents/skills/linear-process-ai-issues	.agents/skills/linear-process-ai-issues
 nvim	dot-config/nvim	.config/nvim

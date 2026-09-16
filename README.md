@@ -15,7 +15,7 @@ The implementation follows the reviewed
 | `zsh` | `~/.zprezto`, six Zsh runcoms, and `~/.p10k.zsh` |
 | `nvim` | `~/.config/nvim` |
 | `codex` | `~/.codex/AGENTS.md` |
-| `agents` | `~/.agents/skills/{grill-me,explain-code-changes,code-review-skill,frontend-design}` |
+| `agents` | `~/.agents/skills/{grill-me,explain-code-changes,code-review-skill,frontend-design,linear-process-ai-issues}` |
 
 `~/.config`, `~/.codex`, and `~/.agents/skills` remain real directories. Only
 the paths in [`config/managed-paths.tsv`](config/managed-paths.tsv) may be
