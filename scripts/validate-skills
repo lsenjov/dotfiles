@@ -116,11 +116,6 @@ def validate_skill(skill_dir: Path) -> None:
     validate_links(skill_dir, text)
     validate_openai_metadata(skill_dir)
 
-    if name == "frontend-design":
-        for required in ("LICENSE.txt", "ORIGIN.md"):
-            if not (skill_dir / required).is_file():
-                fail(f"{skill_dir}: required attribution file is missing: {required}")
-
     print(f"{name}: valid")
 
 

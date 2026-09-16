@@ -1,3 +1,6 @@
 [submodule "packages/zsh/dot-zprezto"]
 	path = packages/zsh/dot-zprezto
 	url = git@github.com:lsenjov/prezto.git
+[submodule "packages/agents/dot-agents/skills/astra-frontend-design"]
+	path = packages/agents/dot-agents/skills/astra-frontend-design
+	url = https://github.com/Enixes/astra-frontend-design.git

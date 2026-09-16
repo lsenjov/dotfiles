@@ -36,6 +36,7 @@ fi
 
 if find "$repo_root/packages/agents" "$repo_root/packages/codex" \
   \( -name .git -o -name __pycache__ -o -name '*.py[cod]' \) \
+  ! \( -type f -path "$repo_root/packages/agents/dot-agents/skills/astra-frontend-design/.git" \) \
   -print -quit | grep -q .; then
   printf 'error: managed Codex content contains repository or cache metadata\n' >&2
   exit 1

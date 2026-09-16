@@ -15,7 +15,7 @@ The implementation follows the reviewed
 | `zsh` | `~/.zprezto`, six Zsh runcoms, and `~/.p10k.zsh` |
 | `nvim` | `~/.config/nvim` |
 | `codex` | `~/.codex/AGENTS.md` |
-| `agents` | `~/.agents/skills/{grill-me,explain-code-changes,code-review-skill,frontend-design,linear-process-ai-issues}` |
+| `agents` | `~/.agents/skills/{grill-me,explain-code-changes,code-review-skill,astra-frontend-design,linear-process-ai-issues}` |
 
 `~/.config`, `~/.codex`, and `~/.agents/skills` remain real directories. Only
 the paths in [`config/managed-paths.tsv`](config/managed-paths.tsv) may be
@@ -157,8 +157,9 @@ submodule checkout without recording that revision in this repository.
 
 Edit global instructions in
 `packages/codex/dot-codex/AGENTS.md`. Personal skills live below
-`packages/agents/dot-agents/skills/`; they are ordinary tracked directories,
-not nested repositories.
+`packages/agents/dot-agents/skills/`. Most are ordinary tracked directories;
+`astra-frontend-design` is a pinned submodule from
+[Enixes/astra-frontend-design](https://github.com/Enixes/astra-frontend-design).
 
 Run the focused validator while editing:
 
@@ -166,8 +167,11 @@ Run the focused validator while editing:
 ./scripts/validate-skills
 ```
 
-`frontend-design/ORIGIN.md` records its upstream revision, content hash, and
-license provenance. Preserve that attribution when updating the skill.
+To update Astra, check out the desired upstream revision in
+`packages/agents/dot-agents/skills/astra-frontend-design`, run the verification
+suite, and commit the updated submodule reference. Existing installations of the
+retired `frontend-design` skill need their old `~/.agents/skills/frontend-design`
+symlink removed; the installer only manages paths in the current manifest.
 
 ## Verification
 
