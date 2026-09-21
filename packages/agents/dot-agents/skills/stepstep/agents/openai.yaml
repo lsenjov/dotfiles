@@ -1,0 +1,6 @@
+interface:
+  display_name: "Stepstep"
+  short_description: "Explain each non-empty line one step at a time"
+  default_prompt: "Use $stepstep to walk me through this file one non-empty line at a time."
+policy:
+  allow_implicit_invocation: false
