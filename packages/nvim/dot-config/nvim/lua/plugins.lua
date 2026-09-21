@@ -8,8 +8,19 @@ return {
   {
     "neovim/nvim-lspconfig",
     config = function()
+      vim.api.nvim_create_autocmd("LspAttach", {
+        callback = function(args)
+          local client = assert(vim.lsp.get_client_by_id(args.data.client_id))
+          if client.name == "rust_analyzer" and client:supports_method("textDocument/completion") then
+            vim.bo[args.buf].completeopt = "menuone,noselect,popup"
+            vim.lsp.completion.enable(true, client.id, args.buf, { autotrigger = true })
+          end
+        end,
+      })
+
       vim.lsp.enable("clojure_lsp")
       vim.lsp.enable("ruff")
+      vim.lsp.enable("rust_analyzer")
     end,
   },
   {

@@ -15,6 +15,7 @@ vim.g.ale_linters = {
 vim.g.paredit_matchlines = 10000
 vim.g["conjure#mapping#log_reset_soft"] = false
 vim.g["conjure#mapping#log_reset_hard"] = false
+vim.g["conjure#mapping#doc_word"] = false
 
 vim.api.nvim_set_hl(0, "Pmenu", {
   bg = "darkgray",
