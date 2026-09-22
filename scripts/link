@@ -184,8 +184,11 @@ record_container() {
     created_containers+=("$container")
   fi
 }
-if package_is_selected nvim "${packages[@]}"; then
+if package_is_selected nvim "${packages[@]}" || package_is_selected kitty "${packages[@]}"; then
   record_container .config
+fi
+if package_is_selected kitty "${packages[@]}"; then
+  record_container .config/kitty
 fi
 if package_is_selected codex "${packages[@]}"; then
   record_container .codex

@@ -1,6 +1,6 @@
 # Dotfiles
 
-Personal Zsh, Prezto, Neovim, Codex, and agent-skill configuration managed with
+Personal Zsh, Prezto, Neovim, Kitty, Codex, and agent-skill configuration managed with
 GNU Stow. The repository is an explicit allowlist: authored configuration
 belongs here; credentials, sessions, histories, caches, logs, databases, and
 machine identifiers do not.
@@ -14,10 +14,11 @@ The implementation follows the reviewed
 | --- | --- |
 | `zsh` | `~/.zprezto`, six Zsh runcoms, and `~/.p10k.zsh` |
 | `nvim` | `~/.config/nvim` |
+| `kitty` | `~/.config/kitty/kitty.conf`, `~/.config/kitty/current-theme.conf` |
 | `codex` | `~/.codex/AGENTS.md` |
 | `agents` | `~/.agents/skills/{grill-me,stepstep,explain-code-changes,code-review-skill,astra-frontend-design,linear-process-ai-issues}` |
 
-`~/.config`, `~/.codex`, and `~/.agents/skills` remain real directories. Only
+`~/.config`, `~/.config/kitty`, `~/.codex`, and `~/.agents/skills` remain real directories. Only
 the paths in [`config/managed-paths.tsv`](config/managed-paths.tsv) may be
 linked, so unrelated application configuration, Codex runtime state, and
 bundled `.system` skills cannot be folded into this repository by Stow.

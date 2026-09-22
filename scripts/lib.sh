@@ -248,8 +248,11 @@ ensure_target_containers() {
   local target_root=$1
   shift
 
-  if package_is_selected nvim "$@"; then
+  if package_is_selected nvim "$@" || package_is_selected kitty "$@"; then
     ensure_real_directory "$target_root/.config"
+  fi
+  if package_is_selected kitty "$@"; then
+    ensure_real_directory "$target_root/.config/kitty"
   fi
   if package_is_selected codex "$@"; then
     ensure_real_directory "$target_root/.codex"
